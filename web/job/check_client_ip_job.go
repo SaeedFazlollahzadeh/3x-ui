@@ -78,19 +78,15 @@ func (j *CheckClientIpJob) Run() {
 	isAccessLogAvailable := j.checkAccessLogAvailable(iplimitActive)
 
 	if isAccessLogAvailable {
-		if runtime.GOOS == "windows" {
-			if iplimitActive {
-				shouldClearAccessLog = j.processLogFile()
-			}
+		if !iplimitActive {
+			shouldClearAccessLog = j.processLogFile()
+		} else if runtime.GOOS == "windows" {
+			shouldClearAccessLog = j.processLogFile()
 		} else {
-			if iplimitActive {
-				if f2bInstalled {
-					shouldClearAccessLog = j.processLogFile()
-				} else {
-					if !f2bInstalled {
-						logger.Warning("[LimitIP] Fail2Ban is not installed, Please install Fail2Ban from the x-ui bash menu.")
-					}
-				}
+			if f2bInstalled {
+				shouldClearAccessLog = j.processLogFile()
+			} else {
+				logger.Warning("[LimitIP] Fail2Ban is not installed, Please install Fail2Ban from the x-ui bash menu.")
 			}
 		}
 	}
