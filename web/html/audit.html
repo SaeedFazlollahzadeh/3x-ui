@@ -71,7 +71,12 @@
                       <a-select-option value="admin_login">Admin Login</a-select-option>
                       <a-select-option value="subscription_access">Sub Login</a-select-option>
                     </a-select>
-                    <a-input-number v-model="limit" :min="20" :max="1000" :step="20"></a-input-number>
+                    <a-select v-model="pageSize" style="width: 120px">
+                      <a-select-option :value="20">20 / page</a-select-option>
+                      <a-select-option :value="50">50 / page</a-select-option>
+                      <a-select-option :value="100">100 / page</a-select-option>
+                      <a-select-option :value="200">200 / page</a-select-option>
+                    </a-select>
                     <a-button icon="reload" @click="loadLogs">Refresh</a-button>
                   </a-space>
                 </a-col>
@@ -82,8 +87,9 @@
             <a-card hoverable>
               <a-table
                 :columns="columns"
-                :data-source="filteredLogs"
-                :pagination="{ pageSize: 20, showSizeChanger: false }"
+                :data-source="logs"
+                :pagination="pagination"
+                @change="handleTableChange"
                 :row-key="row => row.id"
                 :scroll="{ x: 1200 }">
                 <template slot="eventType" slot-scope="text, row">
@@ -131,7 +137,9 @@
     delimiters: ['[[', ']]'],
     data: {
       loading: false,
-      limit: 200,
+      page: 1,
+      pageSize: 20,
+      total: 0,
       typeFilter: 'all',
       logs: [],
       columns: [
@@ -144,25 +152,51 @@
       ],
     },
     computed: {
-      filteredLogs() {
-        if (this.typeFilter === 'all') {
-          return this.logs;
-        }
-        return this.logs.filter(log => log.eventType === this.typeFilter);
+      pagination() {
+        return {
+          current: this.page,
+          pageSize: this.pageSize,
+          total: this.total,
+          showSizeChanger: false,
+          showTotal: total => `Total: ${total}`
+        };
+      }
+    },
+    watch: {
+      typeFilter() {
+        this.page = 1;
+        this.loadLogs();
+      },
+      pageSize() {
+        this.page = 1;
+        this.loadLogs();
       }
     },
     methods: {
       async loadLogs() {
         this.loading = true;
         try {
-          const msg = await HttpUtil.get(`/panel/api/server/audit/logins?limit=${this.limit}`);
+          const eventType = this.typeFilter === 'all' ? '' : this.typeFilter;
+          const msg = await HttpUtil.get('/panel/api/server/audit/logins', {
+            page: this.page,
+            pageSize: this.pageSize,
+            eventType,
+          });
           if (!msg.success) {
             return;
           }
-          this.logs = msg.obj || [];
+          const page = msg.obj || {};
+          this.logs = page.items || [];
+          this.total = page.total || 0;
+          this.page = page.page || this.page;
+          this.pageSize = page.pageSize || this.pageSize;
         } finally {
           this.loading = false;
         }
+      },
+      handleTableChange(pagination) {
+        this.page = pagination.current || 1;
+        this.loadLogs();
       },
       formatDate(value) {
         if (!value) return '-';

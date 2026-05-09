@@ -306,8 +306,13 @@ func (a *ServerController) getDb(c *gin.Context) {
 
 // getAuditLogins retrieves recent admin login and subscription access audit logs.
 func (a *ServerController) getAuditLogins(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
-	logs, err := a.auditService.List(limit)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	eventType := c.DefaultQuery("eventType", "")
+	if eventType == "all" {
+		eventType = ""
+	}
+	logs, err := a.auditService.ListPage(page, pageSize, eventType)
 	jsonObj(c, logs, err)
 }
 

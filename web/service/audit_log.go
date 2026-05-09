@@ -13,6 +13,13 @@ const (
 	AuditEventSubscriptionLogin = "subscription_access"
 )
 
+type AuditLogPage struct {
+	Items    []model.AuditLoginLog `json:"items"`
+	Total    int64                 `json:"total"`
+	Page     int                   `json:"page"`
+	PageSize int                   `json:"pageSize"`
+}
+
 // AuditLogService stores and retrieves panel audit login events.
 type AuditLogService struct{}
 
@@ -41,31 +48,52 @@ func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEma
 	})
 }
 
-func (s *AuditLogService) List(limit int) ([]model.AuditLoginLog, error) {
-	limit = clampAuditLimit(limit)
-	logs := make([]model.AuditLoginLog, 0, limit)
-	err := database.GetDB().
-		Model(&model.AuditLoginLog{}).
+func (s *AuditLogService) ListPage(page, pageSize int, eventType string) (*AuditLogPage, error) {
+	page, pageSize = clampAuditPage(page, pageSize)
+	logs := make([]model.AuditLoginLog, 0, pageSize)
+
+	query := database.GetDB().Model(&model.AuditLoginLog{})
+	if eventType != "" {
+		query = query.Where("event_type = ?", eventType)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	if err := query.
 		Order("created_at DESC").
-		Limit(limit).
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
 		Find(&logs).
-		Error
-	return logs, err
+		Error; err != nil {
+		return nil, err
+	}
+
+	return &AuditLogPage{
+		Items:    logs,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
 }
 
 func (s *AuditLogService) create(entry model.AuditLoginLog) error {
 	return database.GetDB().Create(&entry).Error
 }
 
-func clampAuditLimit(limit int) int {
-	switch {
-	case limit <= 0:
-		return 200
-	case limit > 1000:
-		return 1000
-	default:
-		return limit
+func clampAuditPage(page, pageSize int) (int, int) {
+	if page <= 0 {
+		page = 1
 	}
+	switch {
+	case pageSize <= 0:
+		pageSize = 20
+	case pageSize > 200:
+		pageSize = 200
+	}
+	return page, pageSize
 }
 
 func normalizeRequestPath(path string) string {
