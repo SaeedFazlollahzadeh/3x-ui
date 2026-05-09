@@ -1,0 +1,163 @@
+{{ template "page/head_start" .}}
+{{ template "page/head_end" .}}
+
+{{ template "page/body_start" .}}
+<style>
+  .audit-page .audit-meta {
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+  }
+
+  .audit-page .audit-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .audit-page .audit-pill.admin {
+    background: rgba(24, 144, 255, 0.12);
+    color: #1668dc;
+  }
+
+  .audit-page .audit-pill.sub {
+    background: rgba(82, 196, 26, 0.12);
+    color: #389e0d;
+  }
+
+  .audit-page .audit-path {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+  }
+
+  body.dark .audit-page .audit-meta,
+  html[data-theme="ultra-dark"] .audit-page .audit-meta {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  body.dark .audit-page .audit-pill.admin,
+  html[data-theme="ultra-dark"] .audit-page .audit-pill.admin {
+    background: rgba(24, 144, 255, 0.18);
+    color: #69b1ff;
+  }
+
+  body.dark .audit-page .audit-pill.sub,
+  html[data-theme="ultra-dark"] .audit-page .audit-pill.sub {
+    background: rgba(82, 196, 26, 0.18);
+    color: #95de64;
+  }
+</style>
+
+<a-layout id="app" v-cloak :class="themeSwitcher.currentTheme + ' audit-page'">
+  <a-sidebar></a-sidebar>
+  <a-layout id="content-layout">
+    <a-layout-content>
+      <a-spin :spinning="loading" :delay="200" tip='{{ i18n "loading"}}' size="large">
+        <a-row :gutter="[16, 16]">
+          <a-col :span="24">
+            <a-card hoverable>
+              <a-row type="flex" justify="space-between" align="middle" :gutter="[12, 12]">
+                <a-col>
+                  <h2 :style="{ margin: 0 }">Audit Logs</h2>
+                  <div class="audit-meta">Admin panel logins and subscription/config access events.</div>
+                </a-col>
+                <a-col>
+                  <a-space>
+                    <a-input-number v-model="limit" :min="20" :max="1000" :step="20"></a-input-number>
+                    <a-button icon="reload" @click="loadLogs">Refresh</a-button>
+                  </a-space>
+                </a-col>
+              </a-row>
+            </a-card>
+          </a-col>
+          <a-col :span="24">
+            <a-card hoverable>
+              <a-table
+                :columns="columns"
+                :data-source="logs"
+                :pagination="{ pageSize: 20, showSizeChanger: false }"
+                :row-key="row => row.id"
+                :scroll="{ x: 1200 }">
+                <template slot="eventType" slot-scope="text, row">
+                  <span class="audit-pill" :class="row.eventType === 'admin_login' ? 'admin' : 'sub'">
+                    [[ row.eventType === 'admin_login' ? 'Admin Login' : 'Subscription Access' ]]
+                  </span>
+                </template>
+                <template slot="subject" slot-scope="text, row">
+                  <div v-if="row.eventType === 'admin_login'">
+                    <b>[[ row.username || 'unknown' ]]</b>
+                  </div>
+                  <div v-else>
+                    <b>[[ row.subId || 'unknown' ]]</b>
+                    <div class="audit-meta" v-if="row.clientEmails">[[ row.clientEmails ]]</div>
+                  </div>
+                </template>
+                <template slot="requestPath" slot-scope="text">
+                  <span class="audit-path">[[ text ]]</span>
+                </template>
+                <template slot="createdAt" slot-scope="text">
+                  [[ formatDate(text) ]]
+                </template>
+                <template slot="userAgent" slot-scope="text">
+                  <a-tooltip :overlay-class-name="themeSwitcher.currentTheme">
+                    <template slot="title">[[ text ]]</template>
+                    <span>[[ truncate(text, 72) ]]</span>
+                  </a-tooltip>
+                </template>
+              </a-table>
+            </a-card>
+          </a-col>
+        </a-row>
+      </a-spin>
+    </a-layout-content>
+  </a-layout>
+</a-layout>
+
+<script>
+  const app = new Vue({
+    el: '#app',
+    delimiters: ['[[', ']]'],
+    data: {
+      loading: false,
+      limit: 200,
+      logs: [],
+      columns: [
+        { title: 'Type', key: 'eventType', scopedSlots: { customRender: 'eventType' }, width: 170 },
+        { title: 'Subject', key: 'subject', scopedSlots: { customRender: 'subject' }, width: 320 },
+        { title: 'IP', dataIndex: 'ipAddress', key: 'ipAddress', width: 160 },
+        { title: 'User Agent', dataIndex: 'userAgent', key: 'userAgent', scopedSlots: { customRender: 'userAgent' } },
+        { title: 'Path', dataIndex: 'requestPath', key: 'requestPath', scopedSlots: { customRender: 'requestPath' }, width: 280 },
+        { title: 'Time', dataIndex: 'createdAt', key: 'createdAt', scopedSlots: { customRender: 'createdAt' }, width: 190 }
+      ],
+    },
+    methods: {
+      async loadLogs() {
+        this.loading = true;
+        try {
+          const msg = await HttpUtil.get(`{{ .base_path }}panel/api/server/audit/logins?limit=${this.limit}`);
+          if (!msg.success) {
+            return;
+          }
+          this.logs = msg.obj || [];
+        } finally {
+          this.loading = false;
+        }
+      },
+      formatDate(value) {
+        if (!value) return '-';
+        return new Date(value).toLocaleString();
+      },
+      truncate(value, maxLength) {
+        if (!value) return '-';
+        return value.length > maxLength ? value.slice(0, maxLength - 3) + '...' : value;
+      }
+    },
+    mounted() {
+      this.loadLogs();
+    }
+  });
+</script>
+{{ template "page/body_end" .}}

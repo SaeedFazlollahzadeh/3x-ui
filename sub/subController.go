@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
+	"github.com/mhsanaei/3x-ui/v2/logger"
+	"github.com/mhsanaei/3x-ui/v2/web/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,6 +32,7 @@ type SUBController struct {
 	subService      *SubService
 	subJsonService  *SubJsonService
 	subClashService *SubClashService
+	auditService    service.AuditLogService
 }
 
 // NewSUBController creates a new subscription controller with the given configuration.
@@ -132,6 +135,7 @@ func (a *SUBController) subs(c *gin.Context) {
 				basePathStr = strings.TrimRight(basePathStr, "/") + "/" + subId + "/"
 			}
 			page := a.subService.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, subURL, subJsonURL, subClashURL, basePathStr)
+			a.logSubscriptionAccess(c, subId)
 			c.HTML(200, "subpage.html", gin.H{
 				"title":        "subscription.title",
 				"cur_ver":      config.GetVersion(),
@@ -165,6 +169,7 @@ func (a *SUBController) subs(c *gin.Context) {
 			profileUrl = fmt.Sprintf("%s://%s%s", scheme, hostWithPort, c.Request.RequestURI)
 		}
 		a.ApplyCommonHeaders(c, header, a.updateInterval, a.subTitle, a.subSupportUrl, profileUrl, a.subAnnounce, a.subEnableRouting, a.subRoutingRules)
+		a.logSubscriptionAccess(c, subId)
 
 		if a.subEncrypt {
 			c.String(200, base64.StdEncoding.EncodeToString([]byte(result)))
@@ -187,6 +192,7 @@ func (a *SUBController) subJsons(c *gin.Context) {
 			profileUrl = fmt.Sprintf("%s://%s%s", scheme, hostWithPort, c.Request.RequestURI)
 		}
 		a.ApplyCommonHeaders(c, header, a.updateInterval, a.subTitle, a.subSupportUrl, profileUrl, a.subAnnounce, a.subEnableRouting, a.subRoutingRules)
+		a.logSubscriptionAccess(c, subId)
 
 		c.String(200, jsonSub)
 	}
@@ -204,8 +210,26 @@ func (a *SUBController) subClashs(c *gin.Context) {
 			profileUrl = fmt.Sprintf("%s://%s%s", scheme, hostWithPort, c.Request.RequestURI)
 		}
 		a.ApplyCommonHeaders(c, header, a.updateInterval, a.subTitle, a.subSupportUrl, profileUrl, a.subAnnounce, a.subEnableRouting, a.subRoutingRules)
+		a.logSubscriptionAccess(c, subId)
 		c.Data(200, "application/yaml; charset=utf-8", []byte(clashSub))
 	}
+}
+
+func (a *SUBController) logSubscriptionAccess(c *gin.Context, subID string) {
+	clientEmails, err := a.subService.GetClientEmailsBySubID(subID)
+	if err != nil {
+		logger.Warning("unable to resolve subscription audit subject:", err)
+	}
+	if err := a.auditService.LogSubscriptionAccess(subID, clientEmails, getRemoteIP(c), c.Request.UserAgent(), c.Request.URL.RequestURI()); err != nil {
+		logger.Warning("unable to write subscription audit log:", err)
+	}
+}
+
+func getRemoteIP(c *gin.Context) string {
+	if ip := strings.TrimSpace(c.ClientIP()); ip != "" {
+		return ip
+	}
+	return "unknown"
 }
 
 // ApplyCommonHeaders sets common HTTP headers for subscription responses including user info, update interval, and profile title.

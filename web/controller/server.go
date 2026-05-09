@@ -25,6 +25,7 @@ type ServerController struct {
 	serverService  service.ServerService
 	settingService service.SettingService
 	panelService   service.PanelService
+	auditService   service.AuditLogService
 
 	lastStatus *service.Status
 
@@ -49,6 +50,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getPanelUpdateInfo", a.getPanelUpdateInfo)
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getDb", a.getDb)
+	g.GET("/audit/logins", a.getAuditLogins)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getNewX25519Cert", a.getNewX25519Cert)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -300,6 +302,13 @@ func (a *ServerController) getDb(c *gin.Context) {
 
 	// Write the file contents to the response
 	c.Writer.Write(db)
+}
+
+// getAuditLogins retrieves recent admin login and subscription access audit logs.
+func (a *ServerController) getAuditLogins(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
+	logs, err := a.auditService.List(limit)
+	jsonObj(c, logs, err)
 }
 
 func isValidFilename(filename string) bool {

@@ -119,6 +119,33 @@ func (s *SubService) GetSubs(subId string, host string) ([]string, int64, xray.C
 	return result, lastOnline, traffic, nil
 }
 
+func (s *SubService) GetClientEmailsBySubID(subId string) ([]string, error) {
+	inbounds, err := s.getInboundsBySubId(subId)
+	if err != nil {
+		return nil, err
+	}
+
+	emails := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, inbound := range inbounds {
+		clients, err := s.inboundService.GetClients(inbound)
+		if err != nil {
+			return nil, err
+		}
+		for _, client := range clients {
+			if client.SubID != subId {
+				continue
+			}
+			if _, ok := seen[client.Email]; ok {
+				continue
+			}
+			seen[client.Email] = struct{}{}
+			emails = append(emails, client.Email)
+		}
+	}
+	return emails, nil
+}
+
 func (s *SubService) getInboundsBySubId(subId string) ([]*model.Inbound, error) {
 	db := database.GetDB()
 	var inbounds []*model.Inbound

@@ -26,6 +26,7 @@ type IndexController struct {
 
 	settingService service.SettingService
 	userService    service.UserService
+	auditService   service.AuditLogService
 	tgbot          service.Tgbot
 }
 
@@ -110,6 +111,9 @@ func (a *IndexController) login(c *gin.Context) {
 
 	defaultLoginLimiter.registerSuccess(remoteIP, form.Username)
 	logger.Infof("%s logged in successfully, Ip Address: %s\n", safeUser, remoteIP)
+	if err := a.auditService.LogAdminLogin(user.Username, remoteIP, c.Request.UserAgent(), c.Request.URL.RequestURI()); err != nil {
+		logger.Warning("unable to write admin login audit log:", err)
+	}
 	a.tgbot.UserLoginNotify(service.LoginAttempt{
 		Username: safeUser,
 		IP:       remoteIP,

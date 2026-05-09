@@ -32,6 +32,7 @@ const (
 func initModels() error {
 	models := []any{
 		&model.User{},
+		&model.AuditLoginLog{},
 		&model.Inbound{},
 		&model.OutboundTraffics{},
 		&model.Setting{},

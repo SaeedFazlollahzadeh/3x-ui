@@ -43,6 +43,19 @@ type User struct {
 	Password string `json:"password"`
 }
 
+// AuditLoginLog stores admin panel logins and subscription/config access events.
+type AuditLoginLog struct {
+	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	EventType    string `json:"eventType" gorm:"index:idx_audit_login_logs_event_time,priority:1;size:64"`
+	Username     string `json:"username,omitempty" gorm:"size:255"`
+	SubID        string `json:"subId,omitempty" gorm:"index;size:255"`
+	ClientEmails string `json:"clientEmails,omitempty" gorm:"type:text"`
+	RequestPath  string `json:"requestPath" gorm:"size:512"`
+	IPAddress    string `json:"ipAddress" gorm:"size:128"`
+	UserAgent    string `json:"userAgent" gorm:"type:text"`
+	CreatedAt    int64  `json:"createdAt" gorm:"autoCreateTime:milli;index:idx_audit_login_logs_event_time,priority:2"`
+}
+
 // Inbound represents an Xray inbound configuration with traffic statistics and settings.
 type Inbound struct {
 	Id                   int                  `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`                                                    // Unique identifier
