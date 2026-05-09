@@ -802,25 +802,25 @@
       refreshing: false,
     },
     computed: {
-      get dbInbound() {
+      dbInbound() {
         return this.infoModal.dbInbound;
       },
-      get inbound() {
+      inbound() {
         return this.infoModal.inbound;
       },
-      get isActive() {
+      isActive() {
         if (infoModal.clientStats) {
           return infoModal.clientStats.enable;
         }
         return true;
       },
-      get isEnable() {
+      isEnable() {
         if (infoModal.clientSettings) {
           return infoModal.clientSettings.enable;
         }
         return infoModal.dbInbound.isEnable;
       },
-      get isDepleted() {
+      isDepleted() {
         const stats = infoModal.clientStats;
         const settings = infoModal.clientSettings;
         if (!stats || !settings) {
@@ -838,17 +838,17 @@
 
         return expired || exhausted;
       },
-      get historyPoints() {
+      historyPoints() {
         return Array.isArray(infoModal.history.points) ? infoModal.history.points : [];
       },
-      get historyHasPoints() {
+      historyHasPoints() {
         return this.historyPoints.length > 0;
       },
-      get historyValueMax() {
+      historyValueMax() {
         if (!this.historyHasPoints) return 0;
         return this.historyPoints.reduce((max, point) => Math.max(max, point.up || 0, point.down || 0, point.total || 0), 0);
       },
-      get historyUnitMeta() {
+      historyUnitMeta() {
         const value = this.historyValueMax;
         const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         let unitIndex = 0;
@@ -862,7 +862,7 @@
           unit: units[unitIndex],
         };
       },
-      get historyGridLines() {
+      historyGridLines() {
         const lines = [];
         const max = this.historyValueMax;
         if (max <= 0) return lines;
@@ -879,20 +879,20 @@
         }
         return lines;
       },
-      get historyUpPolyline() {
+      historyUpPolyline() {
         return this.buildHistoryPolyline('up');
       },
-      get historyDownPolyline() {
+      historyDownPolyline() {
         return this.buildHistoryPolyline('down');
       },
-      get historyTotalPolyline() {
+      historyTotalPolyline() {
         return this.buildHistoryPolyline('total');
       },
-      get historyStartLabel() {
+      historyStartLabel() {
         if (!this.historyHasPoints) return '';
         return this.formatHistoryTime(this.historyPoints[0].timestamp);
       },
-      get historyEndLabel() {
+      historyEndLabel() {
         if (!this.historyHasPoints) return '';
         return this.formatHistoryTime(this.historyPoints[this.historyPoints.length - 1].timestamp);
       },
