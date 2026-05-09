@@ -313,6 +313,53 @@
           </td>
         </tr>
       </table>
+      <div class="usage-history-card">
+        <div class="usage-history-header">
+          <div>
+            <strong>Usage Graph</strong>
+            <div class="usage-history-subtitle">
+              [[ infoModal.history.inboundRemark || dbInbound.remark ]] / [[ infoModal.history.clientEmail || (infoModal.clientSettings && infoModal.clientSettings.email) || '-' ]]
+            </div>
+          </div>
+          <a-tag v-if="infoModal.history.startedAt">
+            Since [[ IntlUtil.formatDate(infoModal.history.startedAt) ]]
+          </a-tag>
+        </div>
+        <div class="usage-history-summary">
+          <a-tag color="blue">Up: [[ formatHistoryBytes(infoModal.history.currentUp) ]]</a-tag>
+          <a-tag color="green">Down: [[ formatHistoryBytes(infoModal.history.currentDown) ]]</a-tag>
+          <a-tag color="purple">Total: [[ formatHistoryBytes(infoModal.history.currentTotal) ]]</a-tag>
+        </div>
+        <div v-if="infoModal.history.loading" class="usage-history-empty">Loading graph...</div>
+        <div v-else-if="!historyHasPoints" class="usage-history-empty">
+          No historical traffic yet. The graph starts from the moment this feature is enabled.
+        </div>
+        <div v-else class="usage-history-chart-wrap">
+          <svg viewBox="0 0 760 240" class="usage-history-chart" preserveAspectRatio="none">
+            <line
+              v-for="grid in historyGridLines"
+              :key="`grid-${grid.y}`"
+              x1="56" :y1="grid.y" x2="740" :y2="grid.y"
+              class="usage-history-grid">
+            </line>
+            <text
+              v-for="grid in historyGridLines"
+              :key="`label-${grid.y}`"
+              x="8" :y="grid.y + 4"
+              class="usage-history-axis-label">[[ grid.label ]]</text>
+            <polyline :points="historyUpPolyline" class="usage-history-line usage-history-up"></polyline>
+            <polyline :points="historyDownPolyline" class="usage-history-line usage-history-down"></polyline>
+            <polyline :points="historyTotalPolyline" class="usage-history-line usage-history-total"></polyline>
+            <text x="56" y="232" class="usage-history-axis-label">[[ historyStartLabel ]]</text>
+            <text x="740" y="232" text-anchor="end" class="usage-history-axis-label">[[ historyEndLabel ]]</text>
+          </svg>
+          <div class="usage-history-legend">
+            <span><i class="legend-swatch legend-up"></i>Up</span>
+            <span><i class="legend-swatch legend-down"></i>Down</span>
+            <span><i class="legend-swatch legend-total"></i>Total</span>
+          </div>
+        </div>
+      </div>
       <template v-if="app.subSettings.enable && infoModal.clientSettings.subId">
         <a-divider>Subscription URL</a-divider>
         <tr-info-row class="tr-info-row">
@@ -634,6 +681,18 @@
     subJsonLink: '',
     clientIps: '',
     clientIpsArray: [],
+    history: {
+      loading: false,
+      inboundRemark: '',
+      clientEmail: '',
+      startedAt: 0,
+      updatedAt: 0,
+      currentUp: 0,
+      currentDown: 0,
+      currentTotal: 0,
+      bucketSeconds: 0,
+      points: [],
+    },
     show(dbInbound, index) {
       this.index = index;
       this.inbound = dbInbound.toInbound();
@@ -670,6 +729,9 @@
           this.subLink = this.genSubLink(this.clientSettings.subId);
           this.subJsonLink = app.subSettings.subJsonEnable ? this.genSubJsonLink(this.clientSettings.subId) : '';
         }
+        this.loadUsageHistory();
+      } else {
+        this.resetUsageHistory();
       }
       this.visible = true;
     },
@@ -681,6 +743,55 @@
     },
     genSubJsonLink(subID) {
       return app.subSettings.subJsonURI + subID;
+    },
+    resetUsageHistory() {
+      this.history = {
+        loading: false,
+        inboundRemark: this.dbInbound.remark || '',
+        clientEmail: this.clientSettings && this.clientSettings.email ? this.clientSettings.email : '',
+        startedAt: 0,
+        updatedAt: 0,
+        currentUp: 0,
+        currentDown: 0,
+        currentTotal: 0,
+        bucketSeconds: 0,
+        points: [],
+      };
+    },
+    loadUsageHistory() {
+      if (!this.clientSettings || !this.clientSettings.email || !this.dbInbound.id) {
+        this.resetUsageHistory();
+        return;
+      }
+      this.history.loading = true;
+      this.history.clientEmail = this.clientSettings.email;
+      this.history.inboundRemark = this.dbInbound.remark || '';
+      HttpUtil.get(`/panel/api/inbounds/${this.dbInbound.id}/clientUsageHistory/${encodeURIComponent(this.clientSettings.email)}`)
+        .then((msg) => {
+          if (!msg || !msg.success || !msg.obj) {
+            this.resetUsageHistory();
+            return;
+          }
+          const obj = msg.obj;
+          this.history = {
+            loading: false,
+            inboundRemark: obj.inboundRemark || this.dbInbound.remark || '',
+            clientEmail: obj.clientEmail || this.clientSettings.email,
+            startedAt: obj.startedAt || 0,
+            updatedAt: obj.updatedAt || 0,
+            currentUp: obj.currentUp || 0,
+            currentDown: obj.currentDown || 0,
+            currentTotal: obj.currentTotal || 0,
+            bucketSeconds: obj.bucketSeconds || 0,
+            points: Array.isArray(obj.points) ? obj.points : [],
+          };
+        })
+        .catch(() => {
+          this.resetUsageHistory();
+        })
+        .finally(() => {
+          this.history.loading = false;
+        });
     }
   };
   const infoModalApp = new Vue({
@@ -724,6 +835,64 @@
         const expired = hasExpiry && now >= expiryTime;
 
         return expired || exhausted;
+      },
+      get historyPoints() {
+        return Array.isArray(infoModal.history.points) ? infoModal.history.points : [];
+      },
+      get historyHasPoints() {
+        return this.historyPoints.length > 0;
+      },
+      get historyValueMax() {
+        if (!this.historyHasPoints) return 0;
+        return this.historyPoints.reduce((max, point) => Math.max(max, point.up || 0, point.down || 0, point.total || 0), 0);
+      },
+      get historyUnitMeta() {
+        const value = this.historyValueMax;
+        const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        let unitIndex = 0;
+        let scaled = value;
+        while (scaled >= 1024 && unitIndex < units.length - 1) {
+          scaled /= 1024;
+          unitIndex++;
+        }
+        return {
+          divisor: Math.pow(1024, unitIndex),
+          unit: units[unitIndex],
+        };
+      },
+      get historyGridLines() {
+        const lines = [];
+        const max = this.historyValueMax;
+        if (max <= 0) return lines;
+        const top = 20;
+        const bottom = 190;
+        for (let i = 0; i < 4; i++) {
+          const ratio = i / 3;
+          const y = bottom - ((bottom - top) * ratio);
+          const rawValue = max * ratio;
+          lines.push({
+            y,
+            label: this.formatHistoryBytes(rawValue),
+          });
+        }
+        return lines;
+      },
+      get historyUpPolyline() {
+        return this.buildHistoryPolyline('up');
+      },
+      get historyDownPolyline() {
+        return this.buildHistoryPolyline('down');
+      },
+      get historyTotalPolyline() {
+        return this.buildHistoryPolyline('total');
+      },
+      get historyStartLabel() {
+        if (!this.historyHasPoints) return '';
+        return this.formatHistoryTime(this.historyPoints[0].timestamp);
+      },
+      get historyEndLabel() {
+        if (!this.historyHasPoints) return '';
+        return this.formatHistoryTime(this.historyPoints[this.historyPoints.length - 1].timestamp);
       },
     },
     methods: {
@@ -771,6 +940,42 @@
           .down;
         return remained > 0 ? SizeFormatter.sizeFormat(remained) : '-';
       },
+      formatHistoryBytes(value) {
+        const num = Number(value || 0);
+        const meta = this.historyUnitMeta;
+        if (!meta || !meta.divisor) {
+          return SizeFormatter.sizeFormat(num);
+        }
+        const scaled = num / meta.divisor;
+        const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+        return `${scaled.toFixed(digits)} ${meta.unit}`;
+      },
+      buildHistoryPolyline(key) {
+        if (!this.historyHasPoints) return '';
+        const left = 56;
+        const right = 740;
+        const top = 20;
+        const bottom = 190;
+        const max = this.historyValueMax || 1;
+        const firstTs = this.historyPoints[0].timestamp || 0;
+        const lastTs = this.historyPoints[this.historyPoints.length - 1].timestamp || firstTs;
+        const span = Math.max(lastTs - firstTs, 1);
+        return this.historyPoints.map((point) => {
+          const x = left + (((point.timestamp - firstTs) / span) * (right - left));
+          const y = bottom - (((point[key] || 0) / max) * (bottom - top));
+          return `${x},${y}`;
+        }).join(' ');
+      },
+      formatHistoryTime(ts) {
+        if (!ts) return '';
+        const date = new Date(ts);
+        return date.toLocaleString([], {
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      },
       refreshIPs() {
         this.refreshing = true;
         refreshIPs(this.infoModal.clientStats.email)
@@ -796,4 +1001,94 @@
     },
   });
 </script>
+<style>
+  .usage-history-card {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(127, 127, 127, 0.18);
+  }
+  .usage-history-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .usage-history-subtitle {
+    font-size: 12px;
+    opacity: 0.72;
+    word-break: break-word;
+  }
+  .usage-history-summary {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .usage-history-empty {
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    opacity: 0.72;
+    font-size: 13px;
+  }
+  .usage-history-chart-wrap {
+    width: 100%;
+  }
+  .usage-history-chart {
+    width: 100%;
+    height: 240px;
+    display: block;
+  }
+  .usage-history-grid {
+    stroke: rgba(127, 127, 127, 0.18);
+    stroke-width: 1;
+  }
+  .usage-history-axis-label {
+    font-size: 11px;
+    fill: currentColor;
+    opacity: 0.68;
+  }
+  .usage-history-line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .usage-history-up {
+    stroke: #1677ff;
+  }
+  .usage-history-down {
+    stroke: #18a058;
+  }
+  .usage-history-total {
+    stroke: #722ed1;
+  }
+  .usage-history-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+  .legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .legend-up {
+    background: #1677ff;
+  }
+  .legend-down {
+    background: #18a058;
+  }
+  .legend-total {
+    background: #722ed1;
+  }
+</style>
 {{end}}

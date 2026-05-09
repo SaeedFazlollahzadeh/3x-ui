@@ -98,6 +98,18 @@ type InboundClientIps struct {
 	Ips         string `json:"ips" form:"ips"`
 }
 
+// ClientTrafficSnapshot stores raw per-client cumulative traffic samples over time.
+// Values are stored in bytes and can be aggregated for charts in the UI.
+type ClientTrafficSnapshot struct {
+	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	InboundId   int    `json:"inboundId" gorm:"index:idx_client_traffic_snapshots_lookup,priority:1"`
+	ClientEmail string `json:"clientEmail" gorm:"size:255;index:idx_client_traffic_snapshots_lookup,priority:2"`
+	Up          int64  `json:"up"`
+	Down        int64  `json:"down"`
+	Total       int64  `json:"total"`
+	CreatedAt   int64  `json:"createdAt" gorm:"autoCreateTime:milli;index:idx_client_traffic_snapshots_lookup,priority:3"`
+}
+
 // HistoryOfSeeders tracks which database seeders have been executed to prevent re-running.
 type HistoryOfSeeders struct {
 	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`

@@ -62,6 +62,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/get/:id", a.getInbound)
 	g.GET("/getClientTraffics/:email", a.getClientTraffics)
 	g.GET("/getClientTrafficsById/:id", a.getClientTrafficsById)
+	g.GET("/:id/clientUsageHistory/:email", a.getClientUsageHistory)
 
 	g.POST("/add", a.addInbound)
 	g.POST("/del/:id", a.delInbound)
@@ -136,6 +137,21 @@ func (a *InboundController) getClientTrafficsById(c *gin.Context) {
 		return
 	}
 	jsonObj(c, clientTraffics, nil)
+}
+
+func (a *InboundController) getClientUsageHistory(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	email := c.Param("email")
+	history, err := a.inboundService.GetClientUsageHistory(id, email)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.trafficGetError"), err)
+		return
+	}
+	jsonObj(c, history, nil)
 }
 
 // addInbound creates a new inbound configuration.

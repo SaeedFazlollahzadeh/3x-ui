@@ -64,6 +64,10 @@ func (j *XrayTrafficJob) Run() {
 		j.xrayService.SetToNeedRestart()
 	}
 
+	if err := j.inboundService.RecordClientTrafficSnapshots(activeEmails(clientTraffics)); err != nil {
+		logger.Warning("record client traffic snapshots failed:", err)
+	}
+
 	// If no frontend client is connected, skip all WebSocket broadcasting
 	// routines — including the active-client DB query and JSON marshaling.
 	if !websocket.HasClients() {
