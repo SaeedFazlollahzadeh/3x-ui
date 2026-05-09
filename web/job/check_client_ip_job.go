@@ -11,11 +11,14 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
+	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v2/xray"
 )
 
@@ -29,6 +32,8 @@ type IPWithTimestamp struct {
 type CheckClientIpJob struct {
 	lastClear     int64
 	disAllowedIps []string
+	auditService  service.AuditLogService
+	seenAccessLog map[string]int64
 }
 
 var job *CheckClientIpJob
@@ -56,7 +61,9 @@ const ipStaleAfterSeconds = int64(30 * 60)
 
 // NewCheckClientIpJob creates a new client IP monitoring job instance.
 func NewCheckClientIpJob() *CheckClientIpJob {
-	job = new(CheckClientIpJob)
+	job = &CheckClientIpJob{
+		seenAccessLog: make(map[string]int64),
+	}
 	return job
 }
 
@@ -198,6 +205,8 @@ func (j *CheckClientIpJob) processLogFile() bool {
 		if existingTime, ok := inboundClientIps[email][ip]; !ok || timestamp > existingTime {
 			inboundClientIps[email][ip] = timestamp
 		}
+
+		j.logClientAccess(email, ip, timestamp)
 	}
 	if err := scanner.Err(); err != nil {
 		j.checkError(err)
@@ -222,6 +231,49 @@ func (j *CheckClientIpJob) processLogFile() bool {
 	}
 
 	return shouldCleanLog
+}
+
+func (j *CheckClientIpJob) logClientAccess(email, ip string, timestamp int64) {
+	if timestamp <= 0 {
+		timestamp = time.Now().Unix()
+	}
+
+	cacheKey := email + "|" + ip + "|" + strconv.FormatInt(timestamp, 10)
+	if seenAt, ok := j.seenAccessLog[cacheKey]; ok && seenAt == timestamp {
+		return
+	}
+	j.seenAccessLog[cacheKey] = timestamp
+
+	inbound, err := j.getInboundByEmail(email)
+	if err != nil || inbound == nil {
+		return
+	}
+
+	subject := strings.TrimSpace(inbound.Remark)
+	if subject == "" {
+		subject = "unknown"
+	}
+	subject += " - " + strings.TrimSpace(email)
+
+	if err := j.auditService.LogSubscriptionAccess(
+		subject,
+		"",
+		[]string{email},
+		ip,
+		"xray-access",
+		strconv.Itoa(inbound.Port),
+	); err != nil {
+		logger.Warning("failed to write client access audit log:", err)
+	}
+
+	if len(j.seenAccessLog) > 4096 {
+		cutoff := time.Now().Unix() - 7200
+		for key, seenAt := range j.seenAccessLog {
+			if seenAt < cutoff {
+				delete(j.seenAccessLog, key)
+			}
+		}
+	}
 }
 
 // mergeClientIps combines the persisted (old) and freshly observed (new)
