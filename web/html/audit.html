@@ -66,6 +66,11 @@
                 </a-col>
                 <a-col>
                   <a-space>
+                    <a-select v-model="typeFilter" style="width: 160px">
+                      <a-select-option value="all">All Types</a-select-option>
+                      <a-select-option value="admin_login">Admin Login</a-select-option>
+                      <a-select-option value="subscription_access">Sub Login</a-select-option>
+                    </a-select>
                     <a-input-number v-model="limit" :min="20" :max="1000" :step="20"></a-input-number>
                     <a-button icon="reload" @click="loadLogs">Refresh</a-button>
                   </a-space>
@@ -77,7 +82,7 @@
             <a-card hoverable>
               <a-table
                 :columns="columns"
-                :data-source="logs"
+                :data-source="filteredLogs"
                 :pagination="{ pageSize: 20, showSizeChanger: false }"
                 :row-key="row => row.id"
                 :scroll="{ x: 1200 }">
@@ -127,6 +132,7 @@
     data: {
       loading: false,
       limit: 200,
+      typeFilter: 'all',
       logs: [],
       columns: [
         { title: 'Type', key: 'eventType', scopedSlots: { customRender: 'eventType' }, width: 170 },
@@ -136,6 +142,14 @@
         { title: 'Path', dataIndex: 'requestPath', key: 'requestPath', scopedSlots: { customRender: 'requestPath' }, width: 180 },
         { title: 'Time', dataIndex: 'createdAt', key: 'createdAt', scopedSlots: { customRender: 'createdAt' }, width: 190 }
       ],
+    },
+    computed: {
+      filteredLogs() {
+        if (this.typeFilter === 'all') {
+          return this.logs;
+        }
+        return this.logs.filter(log => log.eventType === this.typeFilter);
+      }
     },
     methods: {
       async loadLogs() {
