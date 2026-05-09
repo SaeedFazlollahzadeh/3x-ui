@@ -20,6 +20,7 @@ func (s *AuditLogService) LogAdminLogin(username, ip, userAgent, requestPath str
 	return s.create(model.AuditLoginLog{
 		EventType:   AuditEventAdminLogin,
 		Username:    strings.TrimSpace(username),
+		Subject:     strings.TrimSpace(username),
 		RequestPath: normalizeRequestPath(requestPath),
 		IPAddress:   normalizeAuditValue(ip, 128),
 		UserAgent:   normalizeAuditValue(userAgent, 2048),
@@ -27,9 +28,10 @@ func (s *AuditLogService) LogAdminLogin(username, ip, userAgent, requestPath str
 	})
 }
 
-func (s *AuditLogService) LogSubscriptionAccess(subID string, clientEmails []string, ip, userAgent, requestPath string) error {
+func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEmails []string, ip, userAgent, requestPath string) error {
 	return s.create(model.AuditLoginLog{
 		EventType:    AuditEventSubscriptionLogin,
+		Subject:      normalizeAuditValue(subject, 255),
 		SubID:        strings.TrimSpace(subID),
 		ClientEmails: strings.Join(uniqueNonEmpty(clientEmails), ", "),
 		RequestPath:  normalizeRequestPath(requestPath),

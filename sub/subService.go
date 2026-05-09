@@ -146,6 +146,40 @@ func (s *SubService) GetClientEmailsBySubID(subId string) ([]string, error) {
 	return emails, nil
 }
 
+type SubscriptionAccessTarget struct {
+	SubID       string
+	Subject     string
+	Port        int
+	ClientEmail string
+}
+
+func (s *SubService) GetAccessTargetsBySubID(subId string) ([]SubscriptionAccessTarget, error) {
+	inbounds, err := s.getInboundsBySubId(subId)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := make([]SubscriptionAccessTarget, 0)
+	for _, inbound := range inbounds {
+		clients, err := s.inboundService.GetClients(inbound)
+		if err != nil {
+			return nil, err
+		}
+		for _, client := range clients {
+			if client.SubID != subId {
+				continue
+			}
+			targets = append(targets, SubscriptionAccessTarget{
+				SubID:       subId,
+				Subject:     strings.TrimSpace(inbound.Remark) + " - " + strings.TrimSpace(client.Email),
+				Port:        inbound.Port,
+				ClientEmail: client.Email,
+			})
+		}
+	}
+	return targets, nil
+}
+
 func (s *SubService) getInboundsBySubId(subId string) ([]*model.Inbound, error) {
 	db := database.GetDB()
 	var inbounds []*model.Inbound

@@ -48,6 +48,7 @@ type AuditLoginLog struct {
 	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	EventType    string `json:"eventType" gorm:"index:idx_audit_login_logs_event_time,priority:1;size:64"`
 	Username     string `json:"username,omitempty" gorm:"size:255"`
+	Subject      string `json:"subject,omitempty" gorm:"size:255"`
 	SubID        string `json:"subId,omitempty" gorm:"index;size:255"`
 	ClientEmails string `json:"clientEmails,omitempty" gorm:"type:text"`
 	RequestPath  string `json:"requestPath" gorm:"size:512"`

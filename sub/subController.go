@@ -111,8 +111,7 @@ func (a *SUBController) subs(c *gin.Context) {
 		}
 
 		// If the request expects HTML (e.g., browser) or explicitly asked (?html=1 or ?view=html), render the info page here
-		accept := c.GetHeader("Accept")
-		if strings.Contains(strings.ToLower(accept), "text/html") || c.Query("html") == "1" || strings.EqualFold(c.Query("view"), "html") {
+		if wantsHTML(c) {
 			// Build page data in service
 			subURL, subJsonURL, subClashURL := a.subService.BuildURLs(scheme, hostWithPort, a.subPath, a.subJsonPath, a.subClashPath, subId)
 			if !a.jsonEnabled {
@@ -216,12 +215,22 @@ func (a *SUBController) subClashs(c *gin.Context) {
 }
 
 func (a *SUBController) logSubscriptionAccess(c *gin.Context, subID string) {
-	clientEmails, err := a.subService.GetClientEmailsBySubID(subID)
+	targets, err := a.subService.GetAccessTargetsBySubID(subID)
 	if err != nil {
 		logger.Warning("unable to resolve subscription audit subject:", err)
+		return
 	}
-	if err := a.auditService.LogSubscriptionAccess(subID, clientEmails, getRemoteIP(c), c.Request.UserAgent(), c.Request.URL.RequestURI()); err != nil {
-		logger.Warning("unable to write subscription audit log:", err)
+	for _, target := range targets {
+		if err := a.auditService.LogSubscriptionAccess(
+			target.Subject,
+			target.SubID,
+			[]string{target.ClientEmail},
+			getRemoteIP(c),
+			c.Request.UserAgent(),
+			strconv.Itoa(target.Port),
+		); err != nil {
+			logger.Warning("unable to write subscription audit log:", err)
+		}
 	}
 }
 
@@ -230,6 +239,11 @@ func getRemoteIP(c *gin.Context) string {
 		return ip
 	}
 	return "unknown"
+}
+
+func wantsHTML(c *gin.Context) bool {
+	accept := c.GetHeader("Accept")
+	return strings.Contains(strings.ToLower(accept), "text/html") || c.Query("html") == "1" || strings.EqualFold(c.Query("view"), "html")
 }
 
 // ApplyCommonHeaders sets common HTTP headers for subscription responses including user info, update interval, and profile title.

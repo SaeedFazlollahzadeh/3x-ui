@@ -83,7 +83,7 @@
                 :scroll="{ x: 1200 }">
                 <template slot="eventType" slot-scope="text, row">
                   <span class="audit-pill" :class="row.eventType === 'admin_login' ? 'admin' : 'sub'">
-                    [[ row.eventType === 'admin_login' ? 'Admin Login' : 'Subscription Access' ]]
+                    [[ row.eventType === 'admin_login' ? 'Admin Login' : 'Sub Login' ]]
                   </span>
                 </template>
                 <template slot="subject" slot-scope="text, row">
@@ -91,7 +91,7 @@
                     <b>[[ row.username || 'unknown' ]]</b>
                   </div>
                   <div v-else>
-                    <b>[[ row.subId || 'unknown' ]]</b>
+                    <b>[[ row.subject || 'unknown' ]]</b>
                     <div class="audit-meta" v-if="row.clientEmails">[[ row.clientEmails ]]</div>
                   </div>
                 </template>
@@ -133,7 +133,7 @@
         { title: 'Subject', key: 'subject', scopedSlots: { customRender: 'subject' }, width: 320 },
         { title: 'IP', dataIndex: 'ipAddress', key: 'ipAddress', width: 160 },
         { title: 'User Agent', dataIndex: 'userAgent', key: 'userAgent', scopedSlots: { customRender: 'userAgent' } },
-        { title: 'Path', dataIndex: 'requestPath', key: 'requestPath', scopedSlots: { customRender: 'requestPath' }, width: 280 },
+        { title: 'Path', dataIndex: 'requestPath', key: 'requestPath', scopedSlots: { customRender: 'requestPath' }, width: 180 },
         { title: 'Time', dataIndex: 'createdAt', key: 'createdAt', scopedSlots: { customRender: 'createdAt' }, width: 190 }
       ],
     },
