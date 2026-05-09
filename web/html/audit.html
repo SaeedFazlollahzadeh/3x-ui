@@ -141,7 +141,7 @@
       async loadLogs() {
         this.loading = true;
         try {
-          const msg = await HttpUtil.get(`{{ .base_path }}panel/api/server/audit/logins?limit=${this.limit}`);
+          const msg = await HttpUtil.get(`/panel/api/server/audit/logins?limit=${this.limit}`);
           if (!msg.success) {
             return;
           }
