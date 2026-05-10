@@ -589,8 +589,7 @@ class SizeFormatter {
     static ONE_PB = this.ONE_TB * 1024;
 
     static sizeFormat(size) {
-        if (size <= 0) return "0 B";
-        if (size < this.ONE_KB) return size.toFixed(0) + " B";
+        if (size <= 0) return "0.00 KB";
         if (size < this.ONE_MB) return (size / this.ONE_KB).toFixed(2) + " KB";
         if (size < this.ONE_GB) return (size / this.ONE_MB).toFixed(2) + " MB";
         if (size < this.ONE_TB) return (size / this.ONE_GB).toFixed(2) + " GB";

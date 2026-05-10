@@ -1,35 +1,87 @@
 package service
 
 import (
-	"sort"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/xray"
+	"gorm.io/gorm/clause"
 )
 
+const usageDateLayout = "2006-01-02"
+
 type ClientUsageHistoryPoint struct {
-	Timestamp int64 `json:"timestamp"`
-	Up        int64 `json:"up"`
-	Down      int64 `json:"down"`
-	Total     int64 `json:"total"`
+	Date      string `json:"date"`
+	Timestamp int64  `json:"timestamp"`
+	Up        int64  `json:"up"`
+	Down      int64  `json:"down"`
+	Total     int64  `json:"total"`
 }
 
 type ClientUsageHistoryResponse struct {
-	InboundId     int                      `json:"inboundId"`
-	InboundRemark string                   `json:"inboundRemark"`
-	ClientEmail   string                   `json:"clientEmail"`
-	StartedAt     int64                    `json:"startedAt"`
-	UpdatedAt     int64                    `json:"updatedAt"`
-	CurrentUp     int64                    `json:"currentUp"`
-	CurrentDown   int64                    `json:"currentDown"`
-	CurrentTotal  int64                    `json:"currentTotal"`
-	BucketSeconds int64                    `json:"bucketSeconds"`
+	InboundId     int                       `json:"inboundId"`
+	InboundRemark string                    `json:"inboundRemark"`
+	ClientEmail   string                    `json:"clientEmail"`
+	StartedAt     int64                     `json:"startedAt"`
+	UpdatedAt     int64                     `json:"updatedAt"`
+	CurrentUp     int64                     `json:"currentUp"`
+	CurrentDown   int64                     `json:"currentDown"`
+	CurrentTotal  int64                     `json:"currentTotal"`
 	Points        []ClientUsageHistoryPoint `json:"points"`
 }
 
-// RecordClientTrafficSnapshots persists absolute counters for clients that had
-// traffic activity in the current polling cycle. Values are stored in bytes.
+type DailyUsageListItem struct {
+	UsageDate     string `json:"usageDate"`
+	Timestamp     int64  `json:"timestamp"`
+	InboundId     int    `json:"inboundId"`
+	InboundRemark string `json:"inboundRemark"`
+	ClientEmail   string `json:"clientEmail"`
+	Up            int64  `json:"up"`
+	Down          int64  `json:"down"`
+	Total         int64  `json:"total"`
+}
+
+type DailyUsageListResponse struct {
+	Date  string               `json:"date"`
+	Items []DailyUsageListItem `json:"items"`
+}
+
+type SubUsageResponse struct {
+	SubID      string                   `json:"subId"`
+	Date       string                   `json:"date"`
+	ClientRows []DailyUsageListItem     `json:"clientRows"`
+	Points     []ClientUsageHistoryPoint `json:"points"`
+	Up         int64                    `json:"up"`
+	Down       int64                    `json:"down"`
+	Total      int64                    `json:"total"`
+}
+
+func usageDayBounds(date string) (string, int64, int64, error) {
+	if strings.TrimSpace(date) == "" {
+		date = time.Now().Format(usageDateLayout)
+	}
+	t, err := time.ParseInLocation(usageDateLayout, date, time.Local)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	start := t.UnixMilli()
+	end := t.Add(24*time.Hour - time.Millisecond).UnixMilli()
+	return t.Format(usageDateLayout), start, end, nil
+}
+
+func usageDateTimestamp(date string) int64 {
+	t, err := time.ParseInLocation(usageDateLayout, date, time.Local)
+	if err != nil {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
+// RecordClientTrafficSnapshots persists absolute counters for active clients
+// and folds their traffic deltas into the current day bucket.
 func (s *InboundService) RecordClientTrafficSnapshots(activeEmails []string) error {
 	uniq := uniqueNonEmptyStrings(activeEmails)
 	if len(uniq) == 0 {
@@ -52,7 +104,32 @@ func (s *InboundService) RecordClientTrafficSnapshots(activeEmails []string) err
 		return nil
 	}
 
+	inboundIDs := make([]int, 0, len(rows))
+	emails := make([]string, 0, len(rows))
+	for _, row := range rows {
+		inboundIDs = append(inboundIDs, row.InboundId)
+		emails = append(emails, row.Email)
+	}
+
+	var previous []model.ClientTrafficSnapshot
+	if err := db.Model(&model.ClientTrafficSnapshot{}).
+		Where("inbound_id IN ? AND client_email IN ?", uniqueInts(inboundIDs), uniqueNonEmptyStrings(emails)).
+		Order("created_at desc").
+		Find(&previous).Error; err != nil {
+		return err
+	}
+	prevByKey := make(map[string]model.ClientTrafficSnapshot, len(rows))
+	for _, snapshot := range previous {
+		key := fmt.Sprintf("%d|%s", snapshot.InboundId, snapshot.ClientEmail)
+		if _, exists := prevByKey[key]; exists {
+			continue
+		}
+		prevByKey[key] = snapshot
+	}
+
+	usageDate := time.Now().Format(usageDateLayout)
 	snapshots := make([]model.ClientTrafficSnapshot, 0, len(rows))
+	dailyRows := make([]model.DailyClientUsage, 0, len(rows))
 	for _, row := range rows {
 		snapshots = append(snapshots, model.ClientTrafficSnapshot{
 			InboundId:   row.InboundId,
@@ -61,8 +138,57 @@ func (s *InboundService) RecordClientTrafficSnapshots(activeEmails []string) err
 			Down:        row.Down,
 			Total:       row.Up + row.Down,
 		})
+
+		prev := prevByKey[fmt.Sprintf("%d|%s", row.InboundId, row.Email)]
+		upDelta := row.Up - prev.Up
+		downDelta := row.Down - prev.Down
+		if upDelta < 0 {
+			upDelta = row.Up
+		}
+		if downDelta < 0 {
+			downDelta = row.Down
+		}
+		if upDelta == 0 && downDelta == 0 {
+			continue
+		}
+		dailyRows = append(dailyRows, model.DailyClientUsage{
+			UsageDate:   usageDate,
+			InboundId:   row.InboundId,
+			ClientEmail: row.Email,
+			Up:          upDelta,
+			Down:        downDelta,
+			Total:       upDelta + downDelta,
+		})
 	}
-	return db.Create(&snapshots).Error
+
+	tx := db.Begin()
+	if err := tx.Create(&snapshots).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if len(dailyRows) > 0 {
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "usage_date"},
+				{Name: "inbound_id"},
+				{Name: "client_email"},
+			},
+			DoUpdates: clause.Assignments(map[string]any{
+				"up":         gormExpr("daily_client_usages.up + excluded.up"),
+				"down":       gormExpr("daily_client_usages.down + excluded.down"),
+				"total":      gormExpr("daily_client_usages.total + excluded.total"),
+				"updated_at": gormExpr("excluded.updated_at"),
+			}),
+		}).Create(&dailyRows).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit().Error
+}
+
+func gormExpr(sql string) clause.Expr {
+	return clause.Expr{SQL: sql}
 }
 
 func (s *InboundService) GetClientUsageHistory(inboundId int, email string) (*ClientUsageHistoryResponse, error) {
@@ -84,11 +210,11 @@ func (s *InboundService) GetClientUsageHistory(inboundId int, email string) (*Cl
 		return nil, err
 	}
 
-	var snapshots []model.ClientTrafficSnapshot
-	if err := db.Model(&model.ClientTrafficSnapshot{}).
+	var rows []model.DailyClientUsage
+	if err := db.Model(&model.DailyClientUsage{}).
 		Where("inbound_id = ? AND client_email = ?", inboundId, email).
-		Order("created_at asc").
-		Find(&snapshots).Error; err != nil {
+		Order("usage_date asc").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 
@@ -99,73 +225,169 @@ func (s *InboundService) GetClientUsageHistory(inboundId int, email string) (*Cl
 		CurrentUp:     current.Up,
 		CurrentDown:   current.Down,
 		CurrentTotal:  current.Up + current.Down,
-		Points:        []ClientUsageHistoryPoint{},
+		Points:        make([]ClientUsageHistoryPoint, 0, len(rows)),
 	}
-
-	if len(snapshots) == 0 {
-		return resp, nil
+	for _, row := range rows {
+		ts := usageDateTimestamp(row.UsageDate)
+		if resp.StartedAt == 0 {
+			resp.StartedAt = ts
+		}
+		resp.UpdatedAt = ts
+		resp.Points = append(resp.Points, ClientUsageHistoryPoint{
+			Date:      row.UsageDate,
+			Timestamp: ts,
+			Up:        row.Up,
+			Down:      row.Down,
+			Total:     row.Total,
+		})
 	}
-
-	resp.StartedAt = snapshots[0].CreatedAt
-	resp.UpdatedAt = snapshots[len(snapshots)-1].CreatedAt
-	resp.Points, resp.BucketSeconds = aggregateClientUsageHistory(snapshots, 240)
 	return resp, nil
 }
 
-func aggregateClientUsageHistory(snapshots []model.ClientTrafficSnapshot, maxPoints int) ([]ClientUsageHistoryPoint, int64) {
-	if len(snapshots) == 0 {
-		return []ClientUsageHistoryPoint{}, 0
-	}
-	if maxPoints <= 0 || len(snapshots) <= maxPoints {
-		points := make([]ClientUsageHistoryPoint, 0, len(snapshots))
-		for _, snapshot := range snapshots {
-			points = append(points, ClientUsageHistoryPoint{
-				Timestamp: snapshot.CreatedAt,
-				Up:        snapshot.Up,
-				Down:      snapshot.Down,
-				Total:     snapshot.Total,
-			})
-		}
-		return points, 0
+func (s *InboundService) GetDailyUsage(date, inboundQuery, emailQuery string) (*DailyUsageListResponse, error) {
+	usageDate, _, _, err := usageDayBounds(date)
+	if err != nil {
+		return nil, err
 	}
 
-	spanMs := snapshots[len(snapshots)-1].CreatedAt - snapshots[0].CreatedAt
-	if spanMs <= 0 {
-		last := snapshots[len(snapshots)-1]
-		return []ClientUsageHistoryPoint{{
-			Timestamp: last.CreatedAt,
-			Up:        last.Up,
-			Down:      last.Down,
-			Total:     last.Total,
-		}}, 0
+	db := database.GetDB()
+	query := db.Table("daily_client_usages AS d").
+		Select("d.usage_date, d.inbound_id, i.remark AS inbound_remark, d.client_email, d.up, d.down, d.total").
+		Joins("JOIN inbounds AS i ON i.id = d.inbound_id").
+		Where("d.usage_date = ?", usageDate)
+
+	if q := strings.TrimSpace(inboundQuery); q != "" {
+		query = query.Where("i.remark LIKE ?", "%"+q+"%")
+	}
+	if q := strings.TrimSpace(emailQuery); q != "" {
+		query = query.Where("d.client_email LIKE ?", "%"+q+"%")
 	}
 
-	bucketMs := spanMs / int64(maxPoints-1)
-	if bucketMs < 10000 {
-		bucketMs = 10000
+	type row struct {
+		UsageDate     string
+		InboundId     int
+		InboundRemark string
+		ClientEmail   string
+		Up            int64
+		Down          int64
+		Total         int64
+	}
+	var rows []row
+	if err := query.Order("i.remark asc, d.client_email asc").Scan(&rows).Error; err != nil {
+		return nil, err
 	}
 
-	grouped := make(map[int64]model.ClientTrafficSnapshot, maxPoints)
-	order := make([]int64, 0, maxPoints)
-	for _, snapshot := range snapshots {
-		bucket := ((snapshot.CreatedAt - snapshots[0].CreatedAt) / bucketMs) * bucketMs
-		bucketStart := snapshots[0].CreatedAt + bucket
-		if _, exists := grouped[bucketStart]; !exists {
-			order = append(order, bucketStart)
-		}
-		grouped[bucketStart] = snapshot
-	}
-	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
-
-	points := make([]ClientUsageHistoryPoint, 0, len(order))
-	for _, bucketStart := range order {
-		snapshot := grouped[bucketStart]
-		points = append(points, ClientUsageHistoryPoint{
-			Timestamp: snapshot.CreatedAt,
-			Up:        snapshot.Up,
-			Down:      snapshot.Down,
-			Total:     snapshot.Total,
+	items := make([]DailyUsageListItem, 0, len(rows))
+	ts := usageDateTimestamp(usageDate)
+	for _, row := range rows {
+		items = append(items, DailyUsageListItem{
+			UsageDate:     row.UsageDate,
+			Timestamp:     ts,
+			InboundId:     row.InboundId,
+			InboundRemark: row.InboundRemark,
+			ClientEmail:   row.ClientEmail,
+			Up:            row.Up,
+			Down:          row.Down,
+			Total:         row.Total,
 		})
 	}
-	return points, bucketMs / 1000
+	return &DailyUsageListResponse{Date: usageDate, Items: items}, nil
+}
+
+func (s *InboundService) GetSubDailyUsage(subID, date string) (*SubUsageResponse, error) {
+	usageDate, _, _, err := usageDayBounds(date)
+	if err != nil {
+		return nil, err
+	}
+
+	db := database.GetDB()
+	var inbounds []*model.Inbound
+	if err := db.Model(model.Inbound{}).Where(`id in (
+		SELECT DISTINCT id
+		FROM inbounds, JSON_EACH(JSON_EXTRACT(inbounds.settings, '$.clients')) AS client
+		WHERE JSON_EXTRACT(client.value, '$.subId') = ? AND enable = ?
+	)`, subID, true).Find(&inbounds).Error; err != nil {
+		return nil, err
+	}
+	if len(inbounds) == 0 {
+		return &SubUsageResponse{SubID: subID, Date: usageDate, ClientRows: []DailyUsageListItem{}, Points: []ClientUsageHistoryPoint{}}, nil
+	}
+
+	type target struct {
+		InboundId int
+		Remark    string
+		Email     string
+	}
+	targets := make([]target, 0)
+	remarks := make(map[int]string)
+	for _, inbound := range inbounds {
+		clients, err := s.GetClients(inbound)
+		if err != nil {
+			continue
+		}
+		remarks[inbound.Id] = inbound.Remark
+		for _, client := range clients {
+			if client.SubID == subID && client.Email != "" {
+				targets = append(targets, target{InboundId: inbound.Id, Remark: inbound.Remark, Email: client.Email})
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return &SubUsageResponse{SubID: subID, Date: usageDate, ClientRows: []DailyUsageListItem{}, Points: []ClientUsageHistoryPoint{}}, nil
+	}
+
+	inboundIDs := make([]int, 0, len(targets))
+	emails := make([]string, 0, len(targets))
+	targetKeySet := make(map[string]struct{}, len(targets))
+	for _, t := range targets {
+		inboundIDs = append(inboundIDs, t.InboundId)
+		emails = append(emails, t.Email)
+		targetKeySet[fmt.Sprintf("%d|%s", t.InboundId, t.Email)] = struct{}{}
+	}
+
+	var rows []model.DailyClientUsage
+	if err := db.Model(&model.DailyClientUsage{}).
+		Where("usage_date = ? AND inbound_id IN ? AND client_email IN ?", usageDate, uniqueInts(inboundIDs), uniqueNonEmptyStrings(emails)).
+		Order("inbound_id asc, client_email asc").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	clientRows := make([]DailyUsageListItem, 0, len(rows))
+	points := make([]ClientUsageHistoryPoint, 0, len(rows))
+	ts := usageDateTimestamp(usageDate)
+	var up, down int64
+	for _, row := range rows {
+		if _, ok := targetKeySet[fmt.Sprintf("%d|%s", row.InboundId, row.ClientEmail)]; !ok {
+			continue
+		}
+		clientRows = append(clientRows, DailyUsageListItem{
+			UsageDate:     row.UsageDate,
+			Timestamp:     ts,
+			InboundId:     row.InboundId,
+			InboundRemark: remarks[row.InboundId],
+			ClientEmail:   row.ClientEmail,
+			Up:            row.Up,
+			Down:          row.Down,
+			Total:         row.Total,
+		})
+		up += row.Up
+		down += row.Down
+	}
+	points = append(points, ClientUsageHistoryPoint{
+		Date:      usageDate,
+		Timestamp: ts,
+		Up:        up,
+		Down:      down,
+		Total:     up + down,
+	})
+	return &SubUsageResponse{
+		SubID:      subID,
+		Date:       usageDate,
+		ClientRows: clientRows,
+		Points:     points,
+		Up:         up,
+		Down:       down,
+		Total:      up + down,
+	}, nil
 }

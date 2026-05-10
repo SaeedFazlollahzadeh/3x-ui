@@ -38,6 +38,7 @@ func initModels() error {
 		&model.Setting{},
 		&model.InboundClientIps{},
 		&model.ClientTrafficSnapshot{},
+		&model.DailyClientUsage{},
 		&xray.ClientTraffic{},
 		&model.HistoryOfSeeders{},
 		&model.CustomGeoResource{},

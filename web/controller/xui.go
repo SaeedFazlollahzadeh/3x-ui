@@ -29,6 +29,7 @@ func (a *XUIController) initRouter(g *gin.RouterGroup) {
 
 	g.GET("/", a.index)
 	g.GET("/inbounds", a.inbounds)
+	g.GET("/usage", a.usage)
 	g.GET("/audit", a.auditLogs)
 	g.GET("/settings", a.settings)
 	g.GET("/xray", a.xraySettings)
@@ -45,6 +46,10 @@ func (a *XUIController) index(c *gin.Context) {
 // inbounds renders the inbounds management page.
 func (a *XUIController) inbounds(c *gin.Context) {
 	html(c, "inbounds.html", "pages.inbounds.title", nil)
+}
+
+func (a *XUIController) usage(c *gin.Context) {
+	html(c, "usage.html", "Usage", nil)
 }
 
 // auditLogs renders the audit log page.

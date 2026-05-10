@@ -23,6 +23,7 @@
     totalByte: parseInt(el.getAttribute('data-totalbyte') || '0', 10) || 0,
     datepicker: el.getAttribute('data-datepicker') || 'gregorian',
   };
+  const today = new Date().toISOString().slice(0, 10);
 
   // Normalize lastOnline to milliseconds if it looks like seconds
   if (data.lastOnlineMs && data.lastOnlineMs < 10_000_000_000) {
@@ -93,6 +94,16 @@
       themeSwitcher,
       app: data,
       links: rawLinks,
+      usageDate: today,
+      dailyUsage: {
+        loading: false,
+        date: today,
+        clientRows: [],
+        points: [],
+        up: 0,
+        down: 0,
+        total: 0,
+      },
       lang: '',
       viewportWidth: (typeof window !== 'undefined' ? window.innerWidth : 1024),
     },
@@ -116,6 +127,7 @@
       } catch (e) { /* ignore */ }
       this._onResize = () => { this.viewportWidth = window.innerWidth; };
       window.addEventListener('resize', this._onResize);
+      this.loadDailyUsage();
     },
     beforeDestroy() {
       if (this._onResize) window.removeEventListener('resize', this._onResize);
@@ -155,6 +167,17 @@
       },
       happUrl() {
         return `happ://add/${this.app.subUrl}`;
+      },
+      dailyBarMax() {
+        return Math.max(this.dailyUsage.up || 0, this.dailyUsage.down || 0, this.dailyUsage.total || 0, 1);
+      },
+      dailyBarHeights() {
+        const scale = 150 / this.dailyBarMax;
+        return {
+          up: Math.max((this.dailyUsage.up || 0) * scale, this.dailyUsage.up ? 2 : 0),
+          down: Math.max((this.dailyUsage.down || 0) * scale, this.dailyUsage.down ? 2 : 0),
+          total: Math.max((this.dailyUsage.total || 0) * scale, this.dailyUsage.total ? 2 : 0),
+        };
       }
     },
     methods: {
@@ -164,6 +187,28 @@
       linkName,
       i18nLabel(key) {
         return '{{ i18n "' + key + '" }}';
+      },
+      async loadDailyUsage() {
+        this.dailyUsage.loading = true;
+        try {
+          const usageUrl = window.location.pathname.replace(/\/$/, '') + '/usage';
+          const msg = await HttpUtil.get(usageUrl, {
+            date: this.usageDate,
+          });
+          if (!msg.success || !msg.obj) return;
+          this.dailyUsage = {
+            loading: false,
+            date: msg.obj.date || this.usageDate,
+            clientRows: Array.isArray(msg.obj.clientRows) ? msg.obj.clientRows : [],
+            points: Array.isArray(msg.obj.points) ? msg.obj.points : [],
+            up: msg.obj.up || 0,
+            down: msg.obj.down || 0,
+            total: msg.obj.total || 0,
+          };
+          this.usageDate = this.dailyUsage.date;
+        } finally {
+          this.dailyUsage.loading = false;
+        }
       },
     },
   });

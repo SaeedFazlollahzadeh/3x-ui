@@ -63,6 +63,8 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getClientTraffics/:email", a.getClientTraffics)
 	g.GET("/getClientTrafficsById/:id", a.getClientTrafficsById)
 	g.GET("/:id/clientUsageHistory/:email", a.getClientUsageHistory)
+	g.GET("/dailyUsage", a.getDailyUsage)
+	g.GET("/subDailyUsage/:subId", a.getSubDailyUsage)
 
 	g.POST("/add", a.addInbound)
 	g.POST("/del/:id", a.delInbound)
@@ -147,6 +149,28 @@ func (a *InboundController) getClientUsageHistory(c *gin.Context) {
 	}
 	email := c.Param("email")
 	history, err := a.inboundService.GetClientUsageHistory(id, email)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.trafficGetError"), err)
+		return
+	}
+	jsonObj(c, history, nil)
+}
+
+func (a *InboundController) getDailyUsage(c *gin.Context) {
+	history, err := a.inboundService.GetDailyUsage(
+		c.Query("date"),
+		c.Query("inbound"),
+		c.Query("email"),
+	)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.trafficGetError"), err)
+		return
+	}
+	jsonObj(c, history, nil)
+}
+
+func (a *InboundController) getSubDailyUsage(c *gin.Context) {
+	history, err := a.inboundService.GetSubDailyUsage(c.Param("subId"), c.Query("date"))
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.trafficGetError"), err)
 		return

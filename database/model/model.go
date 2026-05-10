@@ -110,6 +110,20 @@ type ClientTrafficSnapshot struct {
 	CreatedAt   int64  `json:"createdAt" gorm:"autoCreateTime:milli;index:idx_client_traffic_snapshots_lookup,priority:3"`
 }
 
+// DailyClientUsage stores per-day upload/download usage for a specific
+// client inside a specific inbound. Date is stored as YYYY-MM-DD.
+type DailyClientUsage struct {
+	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UsageDate   string `json:"usageDate" gorm:"size:10;uniqueIndex:idx_daily_client_usage,priority:1"`
+	InboundId   int    `json:"inboundId" gorm:"uniqueIndex:idx_daily_client_usage,priority:2;index:idx_daily_client_usage_lookup,priority:1"`
+	ClientEmail string `json:"clientEmail" gorm:"size:255;uniqueIndex:idx_daily_client_usage,priority:3;index:idx_daily_client_usage_lookup,priority:2"`
+	Up          int64  `json:"up"`
+	Down        int64  `json:"down"`
+	Total       int64  `json:"total"`
+	CreatedAt   int64  `json:"createdAt" gorm:"autoCreateTime:milli"`
+	UpdatedAt   int64  `json:"updatedAt" gorm:"autoUpdateTime:milli"`
+}
+
 // HistoryOfSeeders tracks which database seeders have been executed to prevent re-running.
 type HistoryOfSeeders struct {
 	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`

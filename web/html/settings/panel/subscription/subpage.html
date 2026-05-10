@@ -199,6 +199,57 @@
                                 </a-descriptions-item>
                             </a-descriptions>
                         </a-form-item>
+
+                        <a-form-item>
+                            <a-card size="small" title="Daily Usage">
+                                <a-space direction="vertical" style="width: 100%">
+                                    <a-space wrap>
+                                        <a-input v-model="usageDate" type="date" style="width: 160px"></a-input>
+                                        <a-button icon="reload" @click="loadDailyUsage">Load</a-button>
+                                    </a-space>
+                                    <a-row :gutter="[8,8]">
+                                        <a-col :xs="24" :sm="8">
+                                            <a-statistic title="Upload" :value="SizeFormatter.sizeFormat(dailyUsage.up)"></a-statistic>
+                                        </a-col>
+                                        <a-col :xs="24" :sm="8">
+                                            <a-statistic title="Download" :value="SizeFormatter.sizeFormat(dailyUsage.down)"></a-statistic>
+                                        </a-col>
+                                        <a-col :xs="24" :sm="8">
+                                            <a-statistic title="Total" :value="SizeFormatter.sizeFormat(dailyUsage.total)"></a-statistic>
+                                        </a-col>
+                                    </a-row>
+                                    <div v-if="dailyUsage.loading" class="usage-history-empty">Loading usage...</div>
+                                    <div v-else-if="!dailyUsage.points.length" class="usage-history-empty">No usage for this day.</div>
+                                    <div v-else class="usage-history-chart-wrap">
+                                        <svg viewBox="0 0 760 240" class="usage-history-chart" preserveAspectRatio="none">
+                                            <line x1="80" y1="200" x2="700" y2="200" class="usage-history-grid"></line>
+                                            <rect x="120" :y="200 - dailyBarHeights.up" width="110" :height="dailyBarHeights.up" class="usage-history-up"></rect>
+                                            <rect x="325" :y="200 - dailyBarHeights.down" width="110" :height="dailyBarHeights.down" class="usage-history-down"></rect>
+                                            <rect x="530" :y="200 - dailyBarHeights.total" width="110" :height="dailyBarHeights.total" class="usage-history-total"></rect>
+                                            <text x="175" y="220" text-anchor="middle" class="usage-history-axis-label">Upload</text>
+                                            <text x="380" y="220" text-anchor="middle" class="usage-history-axis-label">Download</text>
+                                            <text x="585" y="220" text-anchor="middle" class="usage-history-axis-label">Total</text>
+                                        </svg>
+                                    </div>
+                                    <a-table
+                                        size="small"
+                                        :pagination="false"
+                                        :data-source="dailyUsage.clientRows"
+                                        :row-key="row => `${row.inboundId}-${row.clientEmail}`"
+                                        :scroll="{ x: 680 }">
+                                        <a-table-column title="Inbound" data-index="inboundRemark" key="inboundRemark"></a-table-column>
+                                        <a-table-column title="Email" data-index="clientEmail" key="clientEmail"></a-table-column>
+                                        <a-table-column title="Traffic" key="traffic">
+                                            <template slot-scope="text, row">
+                                                <div>↑ [[ SizeFormatter.sizeFormat(row.up) ]]</div>
+                                                <div>↓ [[ SizeFormatter.sizeFormat(row.down) ]]</div>
+                                                <div><b>[[ SizeFormatter.sizeFormat(row.total) ]]</b></div>
+                                            </template>
+                                        </a-table-column>
+                                    </a-table>
+                                </a-space>
+                            </a-card>
+                        </a-form-item>
                     </a-form>
 
                     <br />

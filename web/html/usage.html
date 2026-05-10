@@ -1,0 +1,188 @@
+{{ template "page/head_start" .}}
+{{ template "page/head_end" .}}
+
+{{ template "page/body_start" .}}
+<style>
+  .usage-page .usage-subtle {
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+  }
+  .usage-page .usage-chart {
+    width: 100%;
+    height: 260px;
+    display: block;
+  }
+  .usage-page .usage-bar-label {
+    font-size: 11px;
+    fill: currentColor;
+    opacity: 0.72;
+  }
+  .usage-page .usage-empty {
+    min-height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.72;
+  }
+  body.dark .usage-page .usage-subtle,
+  html[data-theme="ultra-dark"] .usage-page .usage-subtle {
+    color: rgba(255, 255, 255, 0.5);
+  }
+</style>
+
+<a-layout id="app" v-cloak :class="themeSwitcher.currentTheme + ' usage-page'">
+  <a-sidebar></a-sidebar>
+  <a-layout id="content-layout">
+    <a-layout-content>
+      <a-spin :spinning="loading" :delay="200" tip='{{ i18n "loading"}}' size="large">
+        <a-row :gutter="[16,16]">
+          <a-col :span="24">
+            <a-card hoverable>
+              <a-row :gutter="[12,12]" type="flex" justify="space-between" align="middle">
+                <a-col>
+                  <h2 :style="{ margin: 0 }">Usage</h2>
+                  <div class="usage-subtle">Per-client per-inbound daily upload, download, and total traffic.</div>
+                </a-col>
+                <a-col>
+                  <a-space wrap>
+                    <a-input v-model="filters.inbound" allow-clear placeholder="Inbound name" style="width: 180px" />
+                    <a-input v-model="filters.email" allow-clear placeholder="Client email" style="width: 220px" />
+                    <a-input v-model="filters.date" type="date" style="width: 160px" />
+                    <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
+                  </a-space>
+                </a-col>
+              </a-row>
+            </a-card>
+          </a-col>
+
+          <a-col :xs="24" :md="8">
+            <a-card hoverable title="Upload">
+              <a-statistic :value="SizeFormatter.sizeFormat(summary.up)" />
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :md="8">
+            <a-card hoverable title="Download">
+              <a-statistic :value="SizeFormatter.sizeFormat(summary.down)" />
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :md="8">
+            <a-card hoverable title="Total">
+              <a-statistic :value="SizeFormatter.sizeFormat(summary.total)" />
+            </a-card>
+          </a-col>
+
+          <a-col :span="24">
+            <a-card hoverable :title="`Daily Graph: ${filters.date}`">
+              <div v-if="!chartRows.length" class="usage-empty">No usage rows for this date.</div>
+              <svg v-else viewBox="0 0 980 260" class="usage-chart" preserveAspectRatio="none">
+                <line x1="50" y1="220" x2="960" y2="220" stroke="currentColor" opacity="0.16"></line>
+                <template v-for="bar in chartBars">
+                  <rect :key="bar.key + '-up'" :x="bar.x" :y="220 - bar.upHeight" width="18" :height="bar.upHeight" fill="#1677ff"></rect>
+                  <rect :key="bar.key + '-down'" :x="bar.x + 21" :y="220 - bar.downHeight" width="18" :height="bar.downHeight" fill="#18a058"></rect>
+                  <rect :key="bar.key + '-total'" :x="bar.x + 42" :y="220 - bar.totalHeight" width="18" :height="bar.totalHeight" fill="#722ed1"></rect>
+                  <text :key="bar.key + '-label'" :x="bar.x + 30" y="238" text-anchor="middle" class="usage-bar-label">[[ bar.shortLabel ]]</text>
+                </template>
+              </svg>
+              <a-space style="margin-top: 8px" wrap>
+                <a-tag color="blue">Up</a-tag>
+                <a-tag color="green">Down</a-tag>
+                <a-tag color="purple">Total</a-tag>
+              </a-space>
+            </a-card>
+          </a-col>
+
+          <a-col :span="24">
+            <a-card hoverable>
+              <a-table :columns="columns" :data-source="rows" :pagination="{ pageSize: 20 }" :row-key="row => `${row.inboundId}-${row.clientEmail}`" :scroll="{ x: 1100 }">
+                <template slot="usageDate" slot-scope="text, row">
+                  [[ row.usageDate ]]
+                </template>
+                <template slot="traffic" slot-scope="text, row">
+                  <div>↑ [[ SizeFormatter.sizeFormat(row.up) ]]</div>
+                  <div>↓ [[ SizeFormatter.sizeFormat(row.down) ]]</div>
+                  <div><b>[[ SizeFormatter.sizeFormat(row.total) ]]</b></div>
+                </template>
+              </a-table>
+            </a-card>
+          </a-col>
+        </a-row>
+      </a-spin>
+    </a-layout-content>
+  </a-layout>
+</a-layout>
+
+{{template "page/body_scripts" .}}
+{{template "component/aSidebar" .}}
+{{template "component/aThemeSwitch" .}}
+
+<script>
+  const today = new Date().toISOString().slice(0, 10);
+  const app = new Vue({
+    el: '#app',
+    delimiters: ['[[', ']]'],
+    data: {
+      loading: false,
+      filters: {
+        date: today,
+        inbound: '',
+        email: '',
+      },
+      rows: [],
+      columns: [
+        { title: 'Date', key: 'usageDate', width: 120, scopedSlots: { customRender: 'usageDate' } },
+        { title: 'Inbound', dataIndex: 'inboundRemark', key: 'inboundRemark', width: 260 },
+        { title: 'Client Email', dataIndex: 'clientEmail', key: 'clientEmail', width: 280 },
+        { title: 'Traffic', key: 'traffic', width: 220, scopedSlots: { customRender: 'traffic' } },
+      ],
+    },
+    computed: {
+      summary() {
+        return this.rows.reduce((acc, row) => {
+          acc.up += row.up || 0;
+          acc.down += row.down || 0;
+          acc.total += row.total || 0;
+          return acc;
+        }, { up: 0, down: 0, total: 0 });
+      },
+      chartRows() {
+        return this.rows.slice(0, 12);
+      },
+      chartMax() {
+        return this.chartRows.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 0) || 1;
+      },
+      chartBars() {
+        return this.chartRows.map((row, index) => {
+          const x = 60 + (index * 74);
+          const scale = 180 / this.chartMax;
+          return {
+            key: `${row.inboundId}-${row.clientEmail}`,
+            x,
+            upHeight: Math.max((row.up || 0) * scale, 2),
+            downHeight: Math.max((row.down || 0) * scale, 2),
+            totalHeight: Math.max((row.total || 0) * scale, 2),
+            shortLabel: (row.clientEmail || '').slice(0, 8) || `#${index + 1}`,
+          };
+        });
+      }
+    },
+    methods: {
+      async loadUsage() {
+        this.loading = true;
+        try {
+          const msg = await HttpUtil.get('/panel/api/inbounds/dailyUsage', this.filters);
+          if (!msg.success || !msg.obj) return;
+          this.rows = Array.isArray(msg.obj.items) ? msg.obj.items : [];
+          if (msg.obj.date) {
+            this.filters.date = msg.obj.date;
+          }
+        } finally {
+          this.loading = false;
+        }
+      }
+    },
+    mounted() {
+      this.loadUsage();
+    }
+  });
+</script>
+{{ template "page/body_end" .}}

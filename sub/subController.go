@@ -33,6 +33,7 @@ type SUBController struct {
 	subJsonService  *SubJsonService
 	subClashService *SubClashService
 	auditService    service.AuditLogService
+	inboundService  service.InboundService
 }
 
 // NewSUBController creates a new subscription controller with the given configuration.
@@ -87,6 +88,7 @@ func NewSUBController(
 func (a *SUBController) initRouter(g *gin.RouterGroup) {
 	gLink := g.Group(a.subPath)
 	gLink.GET(":subid", a.subs)
+	gLink.GET(":subid/usage", a.subDailyUsage)
 	if a.jsonEnabled {
 		gJson := g.Group(a.subJsonPath)
 		gJson.GET(":subid", a.subJsons)
@@ -95,6 +97,15 @@ func (a *SUBController) initRouter(g *gin.RouterGroup) {
 		gClash := g.Group(a.subClashPath)
 		gClash.GET(":subid", a.subClashs)
 	}
+}
+
+func (a *SUBController) subDailyUsage(c *gin.Context) {
+	history, err := a.inboundService.GetSubDailyUsage(c.Param("subid"), c.Query("date"))
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"success": true, "obj": history})
 }
 
 // subs handles HTTP requests for subscription links, returning either HTML page or base64-encoded subscription data.
