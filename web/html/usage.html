@@ -45,10 +45,12 @@
                 </a-col>
                 <a-col>
                   <a-space wrap>
-                    <a-input v-model="filters.inbound" allow-clear placeholder="Inbound name" style="width: 180px" />
-                    <a-input v-model="filters.email" allow-clear placeholder="Client email" style="width: 220px" />
-                    <a-input v-model="filters.date" type="date" style="width: 160px" />
+                    <a-input v-model.trim="filters.inbound" allow-clear placeholder="Inbound name" style="width: 180px" @pressEnter="loadUsage" />
+                    <a-input v-model.trim="filters.email" allow-clear placeholder="Client email" style="width: 220px" @pressEnter="loadUsage" />
+                    <a-input v-model="filters.date" type="date" style="width: 160px" @pressEnter="loadUsage" />
                     <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
+                    <a-button icon="reload" @click="refreshPage">Refresh Page</a-button>
+                    <a-button @click="resetFilters">Reset</a-button>
                   </a-space>
                 </a-col>
               </a-row>
@@ -57,26 +59,26 @@
 
           <a-col :xs="24" :md="8">
             <a-card hoverable title="Upload">
-              <a-statistic :value="SizeFormatter.sizeFormat(summary.up)" />
+              <a-statistic :value="SizeFormatter.sizeFormat(filteredSummary.up)" />
             </a-card>
           </a-col>
           <a-col :xs="24" :md="8">
             <a-card hoverable title="Download">
-              <a-statistic :value="SizeFormatter.sizeFormat(summary.down)" />
+              <a-statistic :value="SizeFormatter.sizeFormat(filteredSummary.down)" />
             </a-card>
           </a-col>
           <a-col :xs="24" :md="8">
             <a-card hoverable title="Total">
-              <a-statistic :value="SizeFormatter.sizeFormat(summary.total)" />
+              <a-statistic :value="SizeFormatter.sizeFormat(filteredSummary.total)" />
             </a-card>
           </a-col>
 
           <a-col :span="24">
             <a-card hoverable :title="`Daily Graph: ${filters.date}`">
-              <div v-if="!chartRows.length" class="usage-empty">No usage rows for this date.</div>
+              <div v-if="!filteredChartRows.length" class="usage-empty">No usage rows for this date.</div>
               <svg v-else viewBox="0 0 980 260" class="usage-chart" preserveAspectRatio="none">
                 <line x1="50" y1="220" x2="960" y2="220" stroke="currentColor" opacity="0.16"></line>
-                <template v-for="bar in chartBars">
+                <template v-for="bar in filteredChartBars">
                   <rect :key="bar.key + '-up'" :x="bar.x" :y="220 - bar.upHeight" width="18" :height="bar.upHeight" fill="#1677ff"></rect>
                   <rect :key="bar.key + '-down'" :x="bar.x + 21" :y="220 - bar.downHeight" width="18" :height="bar.downHeight" fill="#18a058"></rect>
                   <rect :key="bar.key + '-total'" :x="bar.x + 42" :y="220 - bar.totalHeight" width="18" :height="bar.totalHeight" fill="#722ed1"></rect>
@@ -93,7 +95,7 @@
 
           <a-col :span="24">
             <a-card hoverable>
-              <a-table :columns="columns" :data-source="rows" :pagination="{ pageSize: 20 }" :row-key="row => `${row.inboundId}-${row.clientEmail}`" :scroll="{ x: 1100 }">
+              <a-table :columns="columns" :data-source="filteredRows" :pagination="{ pageSize: 20 }" :row-key="row => `${row.inboundId}-${row.clientEmail}`" :scroll="{ x: 1100 }">
                 <template slot="usageDate" slot-scope="text, row">
                   [[ row.usageDate ]]
                 </template>
@@ -136,24 +138,33 @@
       ],
     },
     computed: {
-      summary() {
-        return this.rows.reduce((acc, row) => {
+      filteredRows() {
+        const inboundQuery = (this.filters.inbound || '').trim().toLowerCase();
+        const emailQuery = (this.filters.email || '').trim().toLowerCase();
+        return this.rows.filter((row) => {
+          const inboundMatch = !inboundQuery || (row.inboundRemark || '').toLowerCase().includes(inboundQuery);
+          const emailMatch = !emailQuery || (row.clientEmail || '').toLowerCase().includes(emailQuery);
+          return inboundMatch && emailMatch;
+        });
+      },
+      filteredSummary() {
+        return this.filteredRows.reduce((acc, row) => {
           acc.up += row.up || 0;
           acc.down += row.down || 0;
           acc.total += row.total || 0;
           return acc;
         }, { up: 0, down: 0, total: 0 });
       },
-      chartRows() {
-        return this.rows.slice(0, 12);
+      filteredChartRows() {
+        return this.filteredRows.slice(0, 12);
       },
-      chartMax() {
-        return this.chartRows.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 0) || 1;
+      filteredChartMax() {
+        return this.filteredChartRows.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 0) || 1;
       },
-      chartBars() {
-        return this.chartRows.map((row, index) => {
+      filteredChartBars() {
+        return this.filteredChartRows.map((row, index) => {
           const x = 60 + (index * 74);
-          const scale = 180 / this.chartMax;
+          const scale = 180 / this.filteredChartMax;
           return {
             key: `${row.inboundId}-${row.clientEmail}`,
             x,
@@ -178,6 +189,17 @@
         } finally {
           this.loading = false;
         }
+      },
+      resetFilters() {
+        this.filters = {
+          date: today,
+          inbound: '',
+          email: '',
+        };
+        this.loadUsage();
+      },
+      refreshPage() {
+        window.location.reload();
       }
     },
     mounted() {

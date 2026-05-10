@@ -192,20 +192,29 @@
         this.dailyUsage.loading = true;
         try {
           const usageUrl = window.location.pathname.replace(/\/$/, '') + '/usage';
-          const msg = await HttpUtil.get(usageUrl, {
-            date: this.usageDate,
+          const url = new URL(usageUrl, window.location.origin);
+          url.searchParams.set('date', this.usageDate);
+          const resp = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
           });
-          if (!msg.success || !msg.obj) return;
+          const payload = await resp.json();
+          if (!payload || !payload.success || !payload.obj) return;
           this.dailyUsage = {
             loading: false,
-            date: msg.obj.date || this.usageDate,
-            clientRows: Array.isArray(msg.obj.clientRows) ? msg.obj.clientRows : [],
-            points: Array.isArray(msg.obj.points) ? msg.obj.points : [],
-            up: msg.obj.up || 0,
-            down: msg.obj.down || 0,
-            total: msg.obj.total || 0,
+            date: payload.obj.date || this.usageDate,
+            clientRows: Array.isArray(payload.obj.clientRows) ? payload.obj.clientRows : [],
+            points: Array.isArray(payload.obj.points) ? payload.obj.points : [],
+            up: payload.obj.up || 0,
+            down: payload.obj.down || 0,
+            total: payload.obj.total || 0,
           };
           this.usageDate = this.dailyUsage.date;
+        } catch (error) {
+          console.error('Failed to load sub daily usage:', error);
+          Vue.prototype.$message.error('Failed to load usage');
         } finally {
           this.dailyUsage.loading = false;
         }
