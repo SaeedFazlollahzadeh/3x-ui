@@ -24,9 +24,59 @@
     justify-content: center;
     opacity: 0.72;
   }
+  .usage-page .usage-toolbar-label {
+    font-size: 12px;
+    opacity: 0.72;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .usage-page .usage-date-input {
+    width: 160px;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+    padding: 4px 11px;
+    min-height: 32px;
+    background: #fff;
+  }
+  .usage-page .usage-multi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .usage-page .usage-mini-card {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .usage-page .usage-mini-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    word-break: break-word;
+  }
+  .usage-page .usage-mini-subtitle {
+    font-size: 12px;
+    opacity: 0.72;
+    margin-bottom: 8px;
+    word-break: break-word;
+  }
+  .usage-page .usage-mini-chart {
+    width: 100%;
+    height: 180px;
+    display: block;
+  }
   body.dark .usage-page .usage-subtle,
   html[data-theme="ultra-dark"] .usage-page .usage-subtle {
     color: rgba(255, 255, 255, 0.5);
+  }
+  body.dark .usage-page .usage-date-input,
+  html[data-theme="ultra-dark"] .usage-page .usage-date-input {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: inherit;
+  }
+  body.dark .usage-page .usage-mini-card,
+  html[data-theme="ultra-dark"] .usage-page .usage-mini-card {
+    border-color: rgba(255, 255, 255, 0.12);
   }
 </style>
 
@@ -47,8 +97,14 @@
                   <a-space wrap>
                     <a-input v-model.trim="filters.inbound" allow-clear placeholder="Search inbound name" style="width: 190px" @pressEnter="loadUsage" />
                     <a-input v-model.trim="filters.email" allow-clear placeholder="Search client email" style="width: 220px" @pressEnter="loadUsage" />
-                    <a-input v-model="filters.from" type="date" style="width: 160px" @pressEnter="loadUsage" />
-                    <a-input v-model="filters.to" type="date" style="width: 160px" @pressEnter="loadUsage" />
+                    <span>
+                      <span class="usage-toolbar-label">From</span>
+                      <input v-model="filters.from" type="date" class="usage-date-input" @keydown.enter="loadUsage">
+                    </span>
+                    <span>
+                      <span class="usage-toolbar-label">To</span>
+                      <input v-model="filters.to" type="date" class="usage-date-input" @keydown.enter="loadUsage">
+                    </span>
                     <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
                     <a-button icon="reload" @click="refreshData">Refresh</a-button>
                     <a-button @click="resetFilters">Reset</a-button>
@@ -76,7 +132,22 @@
 
           <a-col :span="24">
             <a-card hoverable :title="`Daily Graph: ${filters.from} to ${filters.to}`">
-              <div v-if="!filteredPoints.length" class="usage-empty">No usage rows for this range.</div>
+              <div v-if="showMultiGraphs && !multiGraphs.length" class="usage-empty">No usage rows for this range.</div>
+              <div v-else-if="showMultiGraphs" class="usage-multi-grid">
+                <div v-for="graph in multiGraphs" :key="graph.key" class="usage-mini-card">
+                  <div class="usage-mini-title">[[ graph.inboundRemark || '-' ]]</div>
+                  <div class="usage-mini-subtitle">[[ graph.clientEmail || '-' ]]</div>
+                  <svg viewBox="0 0 320 180" class="usage-mini-chart" preserveAspectRatio="none">
+                    <line x1="24" y1="150" x2="302" y2="150" stroke="currentColor" opacity="0.16"></line>
+                    <template v-for="bar in graph.bars">
+                      <rect :key="bar.key + '-up'" :x="bar.x" :y="150 - bar.upHeight" width="6" :height="bar.upHeight" fill="#1677ff"></rect>
+                      <rect :key="bar.key + '-down'" :x="bar.x + 8" :y="150 - bar.downHeight" width="6" :height="bar.downHeight" fill="#18a058"></rect>
+                      <rect :key="bar.key + '-total'" :x="bar.x + 16" :y="150 - bar.totalHeight" width="6" :height="bar.totalHeight" fill="#722ed1"></rect>
+                    </template>
+                  </svg>
+                </div>
+              </div>
+              <div v-else-if="!filteredPoints.length" class="usage-empty">No usage rows for this range.</div>
               <svg v-else viewBox="0 0 980 260" class="usage-chart" preserveAspectRatio="none">
                 <line x1="50" y1="220" x2="960" y2="220" stroke="currentColor" opacity="0.16"></line>
                 <template v-for="bar in filteredChartBars">
@@ -158,6 +229,9 @@
           return acc;
         }, { up: 0, down: 0, total: 0 });
       },
+      showMultiGraphs() {
+        return !(this.filters.inbound || '').trim() && !(this.filters.email || '').trim();
+      },
       filteredPoints() {
         const inboundQuery = (this.filters.inbound || '').trim().toLowerCase();
         const emailQuery = (this.filters.email || '').trim().toLowerCase();
@@ -201,6 +275,46 @@
             shortLabel: row.date ? row.date.slice(5) : `#${index + 1}`,
           };
         });
+      },
+      multiGraphs() {
+        if (!this.showMultiGraphs) return [];
+        const grouped = new Map();
+        for (const row of this.rows) {
+          const key = `${row.inboundId}-${row.clientEmail}`;
+          if (!grouped.has(key)) {
+            grouped.set(key, {
+              key,
+              inboundRemark: row.inboundRemark,
+              clientEmail: row.clientEmail,
+              rows: [],
+            });
+          }
+          grouped.get(key).rows.push(row);
+        }
+        return Array.from(grouped.values())
+          .sort((a, b) => ((a.inboundRemark || '') + (a.clientEmail || '')).localeCompare((b.inboundRemark || '') + (b.clientEmail || '')))
+          .slice(0, 12)
+          .map((group) => {
+            const sortedRows = group.rows.sort((a, b) => (a.usageDate || '').localeCompare(b.usageDate || ''));
+            const maxValue = sortedRows.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 1);
+            const spacing = sortedRows.length > 1 ? Math.max(24, Math.floor(220 / sortedRows.length)) : 24;
+            const bars = sortedRows.map((row, index) => {
+              const scale = 120 / maxValue;
+              return {
+                key: `${group.key}-${row.usageDate}`,
+                x: 28 + (index * spacing),
+                upHeight: Math.max((row.up || 0) * scale, row.up ? 2 : 0),
+                downHeight: Math.max((row.down || 0) * scale, row.down ? 2 : 0),
+                totalHeight: Math.max((row.total || 0) * scale, row.total ? 2 : 0),
+              };
+            });
+            return {
+              key: group.key,
+              inboundRemark: group.inboundRemark,
+              clientEmail: group.clientEmail,
+              bars,
+            };
+          });
       }
     },
     methods: {
