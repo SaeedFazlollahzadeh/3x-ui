@@ -74,22 +74,32 @@
         <a-row :gutter="[16,16]">
           <a-col :span="24">
             <a-card hoverable>
-              <a-row :gutter="[12,12]" type="flex" justify="space-between" align="middle">
-                <a-col>
+              <a-row :gutter="[12,12]">
+                <a-col :span="24">
                   <h2 :style="{ margin: 0 }">Usage</h2>
                   <div class="usage-subtle">Per-client per-inbound daily upload, download, and total traffic.</div>
                 </a-col>
-                <a-col>
+                <a-col :span="24">
                   <a-space wrap>
                     <a-input v-model.trim="filters.inbound" allow-clear placeholder="Search inbound name" style="width: 190px" @pressEnter="loadUsage" />
                     <a-input v-model.trim="filters.email" allow-clear placeholder="Search client email" style="width: 220px" @pressEnter="loadUsage" />
                     <span>
                       <span class="usage-toolbar-label">From</span>
-                      <a-input v-model="filters.from" type="date" style="width: 160px" @pressEnter="loadUsage" />
+                      <a-date-picker
+                        :value="dateValue(filters.from)"
+                        format="YYYY-MM-DD"
+                        style="width: 160px"
+                        @change="onFromDateChange"
+                      />
                     </span>
                     <span>
                       <span class="usage-toolbar-label">To</span>
-                      <a-input v-model="filters.to" type="date" style="width: 160px" @pressEnter="loadUsage" />
+                      <a-date-picker
+                        :value="dateValue(filters.to)"
+                        format="YYYY-MM-DD"
+                        style="width: 160px"
+                        @change="onToDateChange"
+                      />
                     </span>
                     <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
                     <a-button icon="reload" @click="refreshData">Refresh</a-button>
@@ -182,6 +192,7 @@
     el: '#app',
     delimiters: ['[[', ']]'],
     data: {
+      themeSwitcher,
       loading: false,
       filters: {
         from: weekAgo,
@@ -305,6 +316,17 @@
       }
     },
     methods: {
+      dateValue(value) {
+        if (!value) return null;
+        const parsed = moment(value, 'YYYY-MM-DD', true);
+        return parsed.isValid() ? parsed : null;
+      },
+      onFromDateChange(date, dateString) {
+        this.filters.from = dateString || '';
+      },
+      onToDateChange(date, dateString) {
+        this.filters.to = dateString || '';
+      },
       async loadUsage() {
         this.loading = true;
         try {
