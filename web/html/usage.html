@@ -30,6 +30,23 @@
     display: block;
     margin-bottom: 4px;
   }
+  .usage-page .usage-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    width: 100%;
+  }
+  .usage-page .usage-toolbar-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .usage-page .usage-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+  }
   .usage-page .usage-multi-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -80,10 +97,14 @@
                   <div class="usage-subtle">Per-client per-inbound daily upload, download, and total traffic.</div>
                 </a-col>
                 <a-col :span="24">
-                  <a-space wrap>
-                    <a-input v-model.trim="filters.inbound" allow-clear placeholder="Search inbound name" style="width: 190px" @pressEnter="loadUsage" />
-                    <a-input v-model.trim="filters.email" allow-clear placeholder="Search client email" style="width: 220px" @pressEnter="loadUsage" />
-                    <span>
+                  <div class="usage-toolbar">
+                    <div class="usage-toolbar-item">
+                      <a-input v-model.trim="filters.inbound" allow-clear placeholder="Search inbound name" style="width: 190px" @pressEnter="loadUsage" />
+                    </div>
+                    <div class="usage-toolbar-item">
+                      <a-input v-model.trim="filters.email" allow-clear placeholder="Search client email" style="width: 220px" @pressEnter="loadUsage" />
+                    </div>
+                    <div class="usage-toolbar-item">
                       <span class="usage-toolbar-label">From</span>
                       <a-date-picker
                         :value="dateValue(filters.from)"
@@ -91,8 +112,8 @@
                         style="width: 160px"
                         @change="onFromDateChange"
                       />
-                    </span>
-                    <span>
+                    </div>
+                    <div class="usage-toolbar-item">
                       <span class="usage-toolbar-label">To</span>
                       <a-date-picker
                         :value="dateValue(filters.to)"
@@ -100,11 +121,13 @@
                         style="width: 160px"
                         @change="onToDateChange"
                       />
-                    </span>
-                    <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
-                    <a-button icon="reload" @click="refreshData">Refresh</a-button>
-                    <a-button @click="resetFilters">Reset</a-button>
-                  </a-space>
+                    </div>
+                    <div class="usage-toolbar-actions">
+                      <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
+                      <a-button icon="reload" @click="refreshData">Refresh</a-button>
+                      <a-button @click="resetFilters">Reset</a-button>
+                    </div>
+                  </div>
                 </a-col>
               </a-row>
             </a-card>
