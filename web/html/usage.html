@@ -45,11 +45,12 @@
                 </a-col>
                 <a-col>
                   <a-space wrap>
-                    <a-input v-model.trim="filters.inbound" allow-clear placeholder="Inbound name" style="width: 180px" @pressEnter="loadUsage" />
-                    <a-input v-model.trim="filters.email" allow-clear placeholder="Client email" style="width: 220px" @pressEnter="loadUsage" />
-                    <a-input v-model="filters.date" type="date" style="width: 160px" @pressEnter="loadUsage" />
+                    <a-input v-model.trim="filters.inbound" allow-clear placeholder="Search inbound name" style="width: 190px" @pressEnter="loadUsage" />
+                    <a-input v-model.trim="filters.email" allow-clear placeholder="Search client email" style="width: 220px" @pressEnter="loadUsage" />
+                    <a-input v-model="filters.from" type="date" style="width: 160px" @pressEnter="loadUsage" />
+                    <a-input v-model="filters.to" type="date" style="width: 160px" @pressEnter="loadUsage" />
                     <a-button type="primary" icon="search" @click="loadUsage">Search</a-button>
-                    <a-button icon="reload" @click="refreshPage">Refresh Page</a-button>
+                    <a-button icon="reload" @click="refreshData">Refresh</a-button>
                     <a-button @click="resetFilters">Reset</a-button>
                   </a-space>
                 </a-col>
@@ -74,8 +75,8 @@
           </a-col>
 
           <a-col :span="24">
-            <a-card hoverable :title="`Daily Graph: ${filters.date}`">
-              <div v-if="!filteredChartRows.length" class="usage-empty">No usage rows for this date.</div>
+            <a-card hoverable :title="`Daily Graph: ${filters.from} to ${filters.to}`">
+              <div v-if="!filteredPoints.length" class="usage-empty">No usage rows for this range.</div>
               <svg v-else viewBox="0 0 980 260" class="usage-chart" preserveAspectRatio="none">
                 <line x1="50" y1="220" x2="960" y2="220" stroke="currentColor" opacity="0.16"></line>
                 <template v-for="bar in filteredChartBars">
@@ -125,11 +126,13 @@
     data: {
       loading: false,
       filters: {
-        date: today,
+        from: today,
+        to: today,
         inbound: '',
         email: '',
       },
       rows: [],
+      points: [],
       columns: [
         { title: 'Date', key: 'usageDate', width: 120, scopedSlots: { customRender: 'usageDate' } },
         { title: 'Inbound', dataIndex: 'inboundRemark', key: 'inboundRemark', width: 260 },
@@ -155,23 +158,47 @@
           return acc;
         }, { up: 0, down: 0, total: 0 });
       },
-      filteredChartRows() {
-        return this.filteredRows.slice(0, 12);
+      filteredPoints() {
+        const inboundQuery = (this.filters.inbound || '').trim().toLowerCase();
+        const emailQuery = (this.filters.email || '').trim().toLowerCase();
+        if (!inboundQuery && !emailQuery) {
+          return this.points.slice(0, 31);
+        }
+        const grouped = new Map();
+        for (const row of this.filteredRows) {
+          const key = row.usageDate;
+          if (!grouped.has(key)) {
+            grouped.set(key, {
+              date: row.usageDate,
+              timestamp: row.timestamp,
+              up: 0,
+              down: 0,
+              total: 0,
+            });
+          }
+          const point = grouped.get(key);
+          point.up += row.up || 0;
+          point.down += row.down || 0;
+          point.total += row.total || 0;
+        }
+        return Array.from(grouped.values()).sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(0, 31);
       },
       filteredChartMax() {
-        return this.filteredChartRows.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 0) || 1;
+        return this.filteredPoints.reduce((max, row) => Math.max(max, row.up || 0, row.down || 0, row.total || 0), 0) || 1;
       },
       filteredChartBars() {
-        return this.filteredChartRows.map((row, index) => {
-          const x = 60 + (index * 74);
+        const points = this.filteredPoints;
+        const spacing = points.length > 1 ? Math.max(70, Math.floor(820 / points.length)) : 70;
+        return points.map((row, index) => {
+          const x = 60 + (index * spacing);
           const scale = 180 / this.filteredChartMax;
           return {
-            key: `${row.inboundId}-${row.clientEmail}`,
+            key: `${row.date}-${index}`,
             x,
             upHeight: Math.max((row.up || 0) * scale, 2),
             downHeight: Math.max((row.down || 0) * scale, 2),
             totalHeight: Math.max((row.total || 0) * scale, 2),
-            shortLabel: (row.clientEmail || '').slice(0, 8) || `#${index + 1}`,
+            shortLabel: row.date ? row.date.slice(5) : `#${index + 1}`,
           };
         });
       }
@@ -183,23 +210,24 @@
           const msg = await HttpUtil.get('/panel/api/inbounds/dailyUsage', this.filters);
           if (!msg.success || !msg.obj) return;
           this.rows = Array.isArray(msg.obj.items) ? msg.obj.items : [];
-          if (msg.obj.date) {
-            this.filters.date = msg.obj.date;
-          }
+          this.points = Array.isArray(msg.obj.points) ? msg.obj.points : [];
+          if (msg.obj.from) this.filters.from = msg.obj.from;
+          if (msg.obj.to) this.filters.to = msg.obj.to;
         } finally {
           this.loading = false;
         }
       },
       resetFilters() {
         this.filters = {
-          date: today,
+          from: today,
+          to: today,
           inbound: '',
           email: '',
         };
         this.loadUsage();
       },
-      refreshPage() {
-        window.location.reload();
+      refreshData() {
+        this.loadUsage();
       }
     },
     mounted() {

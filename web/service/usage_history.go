@@ -45,8 +45,10 @@ type DailyUsageListItem struct {
 }
 
 type DailyUsageListResponse struct {
-	Date  string               `json:"date"`
-	Items []DailyUsageListItem `json:"items"`
+	From   string                   `json:"from"`
+	To     string                   `json:"to"`
+	Points []ClientUsageHistoryPoint `json:"points"`
+	Items  []DailyUsageListItem     `json:"items"`
 }
 
 type SubUsageResponse struct {
@@ -70,6 +72,35 @@ func usageDayBounds(date string) (string, int64, int64, error) {
 	start := t.UnixMilli()
 	end := t.Add(24*time.Hour - time.Millisecond).UnixMilli()
 	return t.Format(usageDateLayout), start, end, nil
+}
+
+func usageDateRange(fromDate, toDate, fallbackDate string) (string, string, error) {
+	if strings.TrimSpace(fromDate) == "" && strings.TrimSpace(toDate) == "" {
+		if strings.TrimSpace(fallbackDate) == "" {
+			fallbackDate = time.Now().Format(usageDateLayout)
+		}
+		fromDate = fallbackDate
+		toDate = fallbackDate
+	} else {
+		if strings.TrimSpace(fromDate) == "" {
+			fromDate = toDate
+		}
+		if strings.TrimSpace(toDate) == "" {
+			toDate = fromDate
+		}
+	}
+	from, err := time.ParseInLocation(usageDateLayout, fromDate, time.Local)
+	if err != nil {
+		return "", "", err
+	}
+	to, err := time.ParseInLocation(usageDateLayout, toDate, time.Local)
+	if err != nil {
+		return "", "", err
+	}
+	if from.After(to) {
+		from, to = to, from
+	}
+	return from.Format(usageDateLayout), to.Format(usageDateLayout), nil
 }
 
 func usageDateTimestamp(date string) int64 {
@@ -244,8 +275,8 @@ func (s *InboundService) GetClientUsageHistory(inboundId int, email string) (*Cl
 	return resp, nil
 }
 
-func (s *InboundService) GetDailyUsage(date, inboundQuery, emailQuery string) (*DailyUsageListResponse, error) {
-	usageDate, _, _, err := usageDayBounds(date)
+func (s *InboundService) GetDailyUsage(date, fromDate, toDate, inboundQuery, emailQuery string) (*DailyUsageListResponse, error) {
+	from, to, err := usageDateRange(fromDate, toDate, date)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +285,7 @@ func (s *InboundService) GetDailyUsage(date, inboundQuery, emailQuery string) (*
 	query := db.Table("daily_client_usages AS d").
 		Select("d.usage_date, d.inbound_id, i.remark AS inbound_remark, d.client_email, d.up, d.down, d.total").
 		Joins("JOIN inbounds AS i ON i.id = d.inbound_id").
-		Where("d.usage_date = ?", usageDate)
+		Where("d.usage_date >= ? AND d.usage_date <= ?", from, to)
 
 	if q := strings.TrimSpace(inboundQuery); q != "" {
 		query = query.Where("i.remark LIKE ?", "%"+q+"%")
@@ -278,8 +309,9 @@ func (s *InboundService) GetDailyUsage(date, inboundQuery, emailQuery string) (*
 	}
 
 	items := make([]DailyUsageListItem, 0, len(rows))
-	ts := usageDateTimestamp(usageDate)
+	pointMap := make(map[string]*ClientUsageHistoryPoint)
 	for _, row := range rows {
+		ts := usageDateTimestamp(row.UsageDate)
 		items = append(items, DailyUsageListItem{
 			UsageDate:     row.UsageDate,
 			Timestamp:     ts,
@@ -290,8 +322,39 @@ func (s *InboundService) GetDailyUsage(date, inboundQuery, emailQuery string) (*
 			Down:          row.Down,
 			Total:         row.Total,
 		})
+		point, ok := pointMap[row.UsageDate]
+		if !ok {
+			point = &ClientUsageHistoryPoint{
+				Date:      row.UsageDate,
+				Timestamp: ts,
+			}
+			pointMap[row.UsageDate] = point
+		}
+		point.Up += row.Up
+		point.Down += row.Down
+		point.Total += row.Total
 	}
-	return &DailyUsageListResponse{Date: usageDate, Items: items}, nil
+	points := make([]ClientUsageHistoryPoint, 0, len(pointMap))
+	for day := from; ; {
+		ts := usageDateTimestamp(day)
+		if point, ok := pointMap[day]; ok {
+			points = append(points, *point)
+		} else {
+			points = append(points, ClientUsageHistoryPoint{
+				Date:      day,
+				Timestamp: ts,
+				Up:        0,
+				Down:      0,
+				Total:     0,
+			})
+		}
+		if day == to {
+			break
+		}
+		next, _ := time.ParseInLocation(usageDateLayout, day, time.Local)
+		day = next.Add(24 * time.Hour).Format(usageDateLayout)
+	}
+	return &DailyUsageListResponse{From: from, To: to, Points: points, Items: items}, nil
 }
 
 func (s *InboundService) GetSubDailyUsage(subID, date string) (*SubUsageResponse, error) {
@@ -301,55 +364,25 @@ func (s *InboundService) GetSubDailyUsage(subID, date string) (*SubUsageResponse
 	}
 
 	db := database.GetDB()
-	var inbounds []*model.Inbound
-	if err := db.Model(model.Inbound{}).Where(`id in (
-		SELECT DISTINCT id
-		FROM inbounds, JSON_EACH(JSON_EXTRACT(inbounds.settings, '$.clients')) AS client
-		WHERE JSON_EXTRACT(client.value, '$.subId') = ? AND enable = ?
-	)`, subID, true).Find(&inbounds).Error; err != nil {
-		return nil, err
+	type row struct {
+		UsageDate     string
+		InboundId     int
+		InboundRemark string
+		ClientEmail   string
+		Up            int64
+		Down          int64
+		Total         int64
 	}
-	if len(inbounds) == 0 {
-		return &SubUsageResponse{SubID: subID, Date: usageDate, ClientRows: []DailyUsageListItem{}, Points: []ClientUsageHistoryPoint{}}, nil
-	}
-
-	type target struct {
-		InboundId int
-		Remark    string
-		Email     string
-	}
-	targets := make([]target, 0)
-	remarks := make(map[int]string)
-	for _, inbound := range inbounds {
-		clients, err := s.GetClients(inbound)
-		if err != nil {
-			continue
-		}
-		remarks[inbound.Id] = inbound.Remark
-		for _, client := range clients {
-			if client.SubID == subID && client.Email != "" {
-				targets = append(targets, target{InboundId: inbound.Id, Remark: inbound.Remark, Email: client.Email})
-			}
-		}
-	}
-	if len(targets) == 0 {
-		return &SubUsageResponse{SubID: subID, Date: usageDate, ClientRows: []DailyUsageListItem{}, Points: []ClientUsageHistoryPoint{}}, nil
-	}
-
-	inboundIDs := make([]int, 0, len(targets))
-	emails := make([]string, 0, len(targets))
-	targetKeySet := make(map[string]struct{}, len(targets))
-	for _, t := range targets {
-		inboundIDs = append(inboundIDs, t.InboundId)
-		emails = append(emails, t.Email)
-		targetKeySet[fmt.Sprintf("%d|%s", t.InboundId, t.Email)] = struct{}{}
-	}
-
-	var rows []model.DailyClientUsage
-	if err := db.Model(&model.DailyClientUsage{}).
-		Where("usage_date = ? AND inbound_id IN ? AND client_email IN ?", usageDate, uniqueInts(inboundIDs), uniqueNonEmptyStrings(emails)).
-		Order("inbound_id asc, client_email asc").
-		Find(&rows).Error; err != nil {
+	var rows []row
+	if err := db.Table("daily_client_usages AS d").
+		Select("d.usage_date, d.inbound_id, i.remark AS inbound_remark, d.client_email, d.up, d.down, d.total").
+		Joins("JOIN inbounds AS i ON i.id = d.inbound_id").
+		Joins("JOIN JSON_EACH(JSON_EXTRACT(i.settings, '$.clients')) AS client").
+		Where("d.usage_date = ? AND i.enable = ?", usageDate, true).
+		Where("JSON_EXTRACT(client.value, '$.subId') = ?", subID).
+		Where("JSON_EXTRACT(client.value, '$.email') = d.client_email").
+		Order("d.inbound_id asc, d.client_email asc").
+		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 
@@ -358,14 +391,11 @@ func (s *InboundService) GetSubDailyUsage(subID, date string) (*SubUsageResponse
 	ts := usageDateTimestamp(usageDate)
 	var up, down int64
 	for _, row := range rows {
-		if _, ok := targetKeySet[fmt.Sprintf("%d|%s", row.InboundId, row.ClientEmail)]; !ok {
-			continue
-		}
 		clientRows = append(clientRows, DailyUsageListItem{
 			UsageDate:     row.UsageDate,
 			Timestamp:     ts,
 			InboundId:     row.InboundId,
-			InboundRemark: remarks[row.InboundId],
+			InboundRemark: row.InboundRemark,
 			ClientEmail:   row.ClientEmail,
 			Up:            row.Up,
 			Down:          row.Down,

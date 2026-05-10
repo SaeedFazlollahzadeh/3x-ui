@@ -159,6 +159,8 @@ func (a *InboundController) getClientUsageHistory(c *gin.Context) {
 func (a *InboundController) getDailyUsage(c *gin.Context) {
 	history, err := a.inboundService.GetDailyUsage(
 		c.Query("date"),
+		c.Query("from"),
+		c.Query("to"),
 		c.Query("inbound"),
 		c.Query("email"),
 	)
