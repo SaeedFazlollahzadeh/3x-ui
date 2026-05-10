@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -18,6 +19,15 @@ type AuditLogPage struct {
 	Total    int64                 `json:"total"`
 	Page     int                   `json:"page"`
 	PageSize int                   `json:"pageSize"`
+}
+
+type AuditLogFilter struct {
+	EventType string
+	IPAddress string
+	Subject   string
+	UserAgent string
+	From      string
+	To        string
 }
 
 // AuditLogService stores and retrieves panel audit login events.
@@ -48,13 +58,36 @@ func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEma
 	})
 }
 
-func (s *AuditLogService) ListPage(page, pageSize int, eventType string) (*AuditLogPage, error) {
+func (s *AuditLogService) ListPage(page, pageSize int, filter AuditLogFilter) (*AuditLogPage, error) {
 	page, pageSize = clampAuditPage(page, pageSize)
 	logs := make([]model.AuditLoginLog, 0, pageSize)
 
 	query := database.GetDB().Model(&model.AuditLoginLog{})
-	if eventType != "" {
-		query = query.Where("event_type = ?", eventType)
+	if filter.EventType != "" {
+		query = query.Where("event_type = ?", filter.EventType)
+	}
+	if value := strings.TrimSpace(filter.IPAddress); value != "" {
+		query = query.Where("ip_address LIKE ?", likePattern(value))
+	}
+	if value := strings.TrimSpace(filter.Subject); value != "" {
+		query = query.Where("LOWER(subject) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.UserAgent); value != "" {
+		query = query.Where("LOWER(user_agent) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.From); value != "" {
+		fromMillis, err := parseAuditTimeFilter(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid from date: %w", err)
+		}
+		query = query.Where("created_at >= ?", fromMillis)
+	}
+	if value := strings.TrimSpace(filter.To); value != "" {
+		toMillis, err := parseAuditTimeFilter(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid to date: %w", err)
+		}
+		query = query.Where("created_at <= ?", toMillis)
 	}
 
 	var total int64
@@ -130,4 +163,22 @@ func uniqueNonEmpty(items []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func likePattern(value string) string {
+	return "%" + value + "%"
+}
+
+func parseAuditTimeFilter(value string) (int64, error) {
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		time.RFC3339,
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return parsed.UnixMilli(), nil
+		}
+	}
+	return 0, fmt.Errorf("unsupported time format: %s", value)
 }

@@ -312,7 +312,14 @@ func (a *ServerController) getAuditLogins(c *gin.Context) {
 	if eventType == "all" {
 		eventType = ""
 	}
-	logs, err := a.auditService.ListPage(page, pageSize, eventType)
+	logs, err := a.auditService.ListPage(page, pageSize, service.AuditLogFilter{
+		EventType: eventType,
+		IPAddress: c.DefaultQuery("ip", ""),
+		Subject:   c.DefaultQuery("subject", ""),
+		UserAgent: c.DefaultQuery("userAgent", ""),
+		From:      c.DefaultQuery("from", ""),
+		To:        c.DefaultQuery("to", ""),
+	})
 	jsonObj(c, logs, err)
 }
 

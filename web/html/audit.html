@@ -33,6 +33,25 @@
     font-size: 12px;
   }
 
+  .audit-page .audit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .audit-page .audit-toolbar-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .audit-page .audit-toolbar-label {
+    font-size: 12px;
+    opacity: 0.72;
+    display: block;
+    margin-bottom: 4px;
+  }
+
   body.dark .audit-page .audit-meta,
   html[data-theme="ultra-dark"] .audit-page .audit-meta {
     color: rgba(255, 255, 255, 0.5);
@@ -59,26 +78,68 @@
         <a-row :gutter="[16, 16]">
           <a-col :span="24">
             <a-card hoverable>
-              <a-row type="flex" justify="space-between" align="middle" :gutter="[12, 12]">
-                <a-col>
+              <a-row :gutter="[12, 12]">
+                <a-col :span="24">
                   <h2 :style="{ margin: 0 }">Audit Logs</h2>
                   <div class="audit-meta">Admin panel logins and subscription/config access events.</div>
                 </a-col>
-                <a-col>
-                  <a-space>
-                    <a-select v-model="typeFilter" style="width: 160px">
-                      <a-select-option value="all">All Types</a-select-option>
-                      <a-select-option value="admin_login">Admin Login</a-select-option>
-                      <a-select-option value="subscription_access">Sub Login</a-select-option>
-                    </a-select>
-                    <a-select v-model="pageSize" style="width: 120px">
-                      <a-select-option :value="20">20 / page</a-select-option>
-                      <a-select-option :value="50">50 / page</a-select-option>
-                      <a-select-option :value="100">100 / page</a-select-option>
-                      <a-select-option :value="200">200 / page</a-select-option>
-                    </a-select>
-                    <a-button icon="reload" @click="loadLogs">Refresh</a-button>
-                  </a-space>
+                <a-col :span="24">
+                  <div class="audit-toolbar">
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">Type</span>
+                      <a-select v-model="typeFilter" style="width: 160px">
+                        <a-select-option value="all">All Types</a-select-option>
+                        <a-select-option value="admin_login">Admin Login</a-select-option>
+                        <a-select-option value="subscription_access">Sub Login</a-select-option>
+                      </a-select>
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">IP</span>
+                      <a-input v-model.trim="filters.ip" allow-clear placeholder="Contains IP" style="width: 180px" @pressEnter="applyFilters" />
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">Subject</span>
+                      <a-input v-model.trim="filters.subject" allow-clear placeholder="Contains subject" style="width: 220px" @pressEnter="applyFilters" />
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">User Agent</span>
+                      <a-input v-model.trim="filters.userAgent" allow-clear placeholder="Contains user agent" style="width: 220px" @pressEnter="applyFilters" />
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">From</span>
+                      <a-date-picker
+                        show-time
+                        format="YYYY-MM-DD HH:mm:ss"
+                        style="width: 220px"
+                        :value="dateTimeValue(filters.from)"
+                        @change="onFromChange"
+                      />
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">To</span>
+                      <a-date-picker
+                        show-time
+                        format="YYYY-MM-DD HH:mm:ss"
+                        style="width: 220px"
+                        :value="dateTimeValue(filters.to)"
+                        @change="onToChange"
+                      />
+                    </div>
+                    <div class="audit-toolbar-item">
+                      <span class="audit-toolbar-label">Rows</span>
+                      <a-select v-model="pageSize" style="width: 120px">
+                        <a-select-option :value="20">20 / page</a-select-option>
+                        <a-select-option :value="50">50 / page</a-select-option>
+                        <a-select-option :value="100">100 / page</a-select-option>
+                        <a-select-option :value="200">200 / page</a-select-option>
+                      </a-select>
+                    </div>
+                    <a-space>
+                      <a-button type="primary" icon="search" @click="applyFilters">Search</a-button>
+                      <a-button icon="reload" @click="loadLogs">Refresh</a-button>
+                      <a-button @click="resetFilters">Reset</a-button>
+                    </a-space>
+                  </div>
                 </a-col>
               </a-row>
             </a-card>
@@ -141,6 +202,13 @@
       pageSize: 20,
       total: 0,
       typeFilter: 'all',
+      filters: {
+        ip: '',
+        subject: '',
+        userAgent: '',
+        from: '',
+        to: '',
+      },
       logs: [],
       columns: [
         { title: 'Type', key: 'eventType', scopedSlots: { customRender: 'eventType' }, width: 170 },
@@ -173,6 +241,10 @@
       }
     },
     methods: {
+      applyFilters() {
+        this.page = 1;
+        this.loadLogs();
+      },
       async loadLogs() {
         this.loading = true;
         try {
@@ -181,6 +253,11 @@
             page: this.page,
             pageSize: this.pageSize,
             eventType,
+            ip: this.filters.ip || '',
+            subject: this.filters.subject || '',
+            userAgent: this.filters.userAgent || '',
+            from: this.filters.from || '',
+            to: this.filters.to || '',
           });
           if (!msg.success) {
             return;
@@ -197,6 +274,27 @@
       handleTableChange(pagination) {
         this.page = pagination.current || 1;
         this.loadLogs();
+      },
+      resetFilters() {
+        this.typeFilter = 'all';
+        this.page = 1;
+        this.filters = {
+          ip: '',
+          subject: '',
+          userAgent: '',
+          from: '',
+          to: '',
+        };
+        this.loadLogs();
+      },
+      dateTimeValue(value) {
+        return value ? moment(value, 'YYYY-MM-DD HH:mm:ss') : null;
+      },
+      onFromChange(_, dateString) {
+        this.filters.from = dateString || '';
+      },
+      onToChange(_, dateString) {
+        this.filters.to = dateString || '';
       },
       formatDate(value) {
         if (!value) return '-';
