@@ -227,9 +227,20 @@
                             <a-card size="small" title="Daily Usage">
                                 <a-space direction="vertical" style="width: 100%">
                                     <a-space wrap>
-                                        <a-input v-model="usageDate" type="date" style="width: 160px"></a-input>
-                                        <a-button icon="reload" @click="loadDailyUsage">Load</a-button>
+                                        <span>
+                                            <div style="font-size: 12px; opacity: 0.72; margin-bottom: 4px;">From</div>
+                                            <a-input v-model="usageFrom" type="date" style="width: 160px"></a-input>
+                                        </span>
+                                        <span>
+                                            <div style="font-size: 12px; opacity: 0.72; margin-bottom: 4px;">To</div>
+                                            <a-input v-model="usageTo" type="date" style="width: 160px"></a-input>
+                                        </span>
+                                        <a-button icon="search" @click="loadDailyUsage">Load</a-button>
+                                        <a-button icon="reload" @click="loadDailyUsage">Refresh</a-button>
                                     </a-space>
+                                    <div style="font-size: 12px; opacity: 0.72;">
+                                        Daily Graph: [[ dailyUsage.from ]] to [[ dailyUsage.to ]]
+                                    </div>
                                     <a-row :gutter="[8,8]">
                                         <a-col :xs="24" :sm="8">
                                             <a-statistic title="Upload" :value="SizeFormatter.sizeFormat(dailyUsage.up)"></a-statistic>
@@ -242,16 +253,16 @@
                                         </a-col>
                                     </a-row>
                                     <div v-if="dailyUsage.loading" class="usage-history-empty">Loading usage...</div>
-                                    <div v-else-if="!dailyUsage.points.length" class="usage-history-empty">No usage for this day.</div>
+                                    <div v-else-if="!dailyUsage.points.length" class="usage-history-empty">No usage for this range.</div>
                                     <div v-else class="usage-history-chart-wrap">
-                                        <svg viewBox="0 0 760 240" class="usage-history-chart" preserveAspectRatio="none">
+                                        <svg viewBox="0 0 980 240" class="usage-history-chart" preserveAspectRatio="none">
                                             <line x1="80" y1="200" x2="700" y2="200" class="usage-history-grid"></line>
-                                            <rect x="120" :y="200 - dailyBarHeights.up" width="110" :height="dailyBarHeights.up" class="usage-history-up"></rect>
-                                            <rect x="325" :y="200 - dailyBarHeights.down" width="110" :height="dailyBarHeights.down" class="usage-history-down"></rect>
-                                            <rect x="530" :y="200 - dailyBarHeights.total" width="110" :height="dailyBarHeights.total" class="usage-history-total"></rect>
-                                            <text x="175" y="220" text-anchor="middle" class="usage-history-axis-label">Upload</text>
-                                            <text x="380" y="220" text-anchor="middle" class="usage-history-axis-label">Download</text>
-                                            <text x="585" y="220" text-anchor="middle" class="usage-history-axis-label">Total</text>
+                                            <template v-for="bar in dailyChartBars">
+                                                <rect :key="bar.key + '-up'" :x="bar.x" :y="200 - bar.upHeight" width="12" :height="bar.upHeight" class="usage-history-up"></rect>
+                                                <rect :key="bar.key + '-down'" :x="bar.x + 15" :y="200 - bar.downHeight" width="12" :height="bar.downHeight" class="usage-history-down"></rect>
+                                                <rect :key="bar.key + '-total'" :x="bar.x + 30" :y="200 - bar.totalHeight" width="12" :height="bar.totalHeight" class="usage-history-total"></rect>
+                                                <text :key="bar.key + '-label'" :x="bar.x + 21" y="220" text-anchor="middle" class="usage-history-axis-label">[[ bar.shortLabel ]]</text>
+                                            </template>
                                         </svg>
                                     </div>
                                     <a-table

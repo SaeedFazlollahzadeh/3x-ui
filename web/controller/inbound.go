@@ -172,7 +172,12 @@ func (a *InboundController) getDailyUsage(c *gin.Context) {
 }
 
 func (a *InboundController) getSubDailyUsage(c *gin.Context) {
-	history, err := a.inboundService.GetSubDailyUsage(c.Param("subId"), c.Query("date"))
+	history, err := a.inboundService.GetSubDailyUsage(
+		c.Param("subId"),
+		c.Query("date"),
+		c.Query("from"),
+		c.Query("to"),
+	)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.trafficGetError"), err)
 		return

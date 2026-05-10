@@ -191,13 +191,14 @@
 
 <script>
   const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - (6 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
   const app = new Vue({
     el: '#app',
     delimiters: ['[[', ']]'],
     data: {
       loading: false,
       filters: {
-        from: today,
+        from: weekAgo,
         to: today,
         inbound: '',
         email: '',
@@ -333,7 +334,7 @@
       },
       resetFilters() {
         this.filters = {
-          from: today,
+          from: weekAgo,
           to: today,
           inbound: '',
           email: '',

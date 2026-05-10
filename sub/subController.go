@@ -100,7 +100,12 @@ func (a *SUBController) initRouter(g *gin.RouterGroup) {
 }
 
 func (a *SUBController) subDailyUsage(c *gin.Context) {
-	history, err := a.inboundService.GetSubDailyUsage(c.Param("subid"), c.Query("date"))
+	history, err := a.inboundService.GetSubDailyUsage(
+		c.Param("subid"),
+		c.Query("date"),
+		c.Query("from"),
+		c.Query("to"),
+	)
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "msg": err.Error()})
 		return
