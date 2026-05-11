@@ -26,9 +26,27 @@ type AuditLogFilter struct {
 	IPAddress string
 	Subject   string
 	Dest      string
+	Inbound   string
+	Email     string
 	UserAgent string
 	From      string
 	To        string
+}
+
+type AccessLogPageItem struct {
+	Id                 int    `json:"id"`
+	Inbound            string `json:"inbound"`
+	Email              string `json:"email"`
+	SourceAddress      string `json:"sourceAddress"`
+	DestinationAddress string `json:"destinationAddress"`
+	Date               int64  `json:"date"`
+}
+
+type AccessLogPage struct {
+	Items    []AccessLogPageItem `json:"items"`
+	Total    int64               `json:"total"`
+	Page     int                 `json:"page"`
+	PageSize int                 `json:"pageSize"`
 }
 
 // AuditLogService stores and retrieves panel audit login events.
@@ -53,6 +71,7 @@ func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEma
 		Subject:      normalizeAuditValue(subject, 255),
 		SubID:        strings.TrimSpace(subID),
 		ClientEmails: strings.Join(uniqueNonEmpty(clientEmails), ", "),
+		Inbound:      normalizeAuditValue(extractInboundName(subject), 255),
 		Destination:  normalizeAuditValue(destination, 1024),
 		RequestPath:  normalizeRequestPath(requestPath),
 		IPAddress:    normalizeAuditValue(ip, 128),
@@ -77,6 +96,12 @@ func (s *AuditLogService) ListPage(page, pageSize int, filter AuditLogFilter) (*
 	}
 	if value := strings.TrimSpace(filter.Dest); value != "" {
 		query = query.Where("LOWER(destination) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.Inbound); value != "" {
+		query = query.Where("LOWER(inbound) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.Email); value != "" {
+		query = query.Where("LOWER(client_emails) LIKE ?", likePattern(strings.ToLower(value)))
 	}
 	if value := strings.TrimSpace(filter.UserAgent); value != "" {
 		query = query.Where("LOWER(user_agent) LIKE ?", likePattern(strings.ToLower(value)))
@@ -112,6 +137,70 @@ func (s *AuditLogService) ListPage(page, pageSize int, filter AuditLogFilter) (*
 
 	return &AuditLogPage{
 		Items:    logs,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+func (s *AuditLogService) ListAccessPage(page, pageSize int, filter AuditLogFilter) (*AccessLogPage, error) {
+	page, pageSize = clampAuditPage(page, pageSize)
+	logs := make([]model.AuditLoginLog, 0, pageSize)
+
+	query := database.GetDB().Model(&model.AuditLoginLog{}).
+		Where("event_type = ?", AuditEventSubscriptionLogin).
+		Where("user_agent = ?", "xray-access")
+
+	if value := strings.TrimSpace(filter.IPAddress); value != "" {
+		query = query.Where("ip_address LIKE ?", likePattern(value))
+	}
+	if value := strings.TrimSpace(filter.Inbound); value != "" {
+		query = query.Where("LOWER(inbound) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.Email); value != "" {
+		query = query.Where("LOWER(client_emails) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.Dest); value != "" {
+		query = query.Where("LOWER(destination) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.From); value != "" {
+		fromMillis, err := parseAuditTimeFilter(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid from date: %w", err)
+		}
+		query = query.Where("created_at >= ?", fromMillis)
+	}
+	if value := strings.TrimSpace(filter.To); value != "" {
+		toMillis, err := parseAuditTimeFilter(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid to date: %w", err)
+		}
+		query = query.Where("created_at <= ?", toMillis)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	if err := query.Order("created_at DESC").Offset((page-1)*pageSize).Limit(pageSize).Find(&logs).Error; err != nil {
+		return nil, err
+	}
+
+	items := make([]AccessLogPageItem, 0, len(logs))
+	for _, entry := range logs {
+		items = append(items, AccessLogPageItem{
+			Id:                 entry.Id,
+			Inbound:            emptyToUnknown(entry.Inbound),
+			Email:              firstCSV(entry.ClientEmails),
+			SourceAddress:      emptyToUnknown(entry.IPAddress),
+			DestinationAddress: emptyToUnknown(entry.Destination),
+			Date:               entry.CreatedAt,
+		})
+	}
+
+	return &AccessLogPage{
+		Items:    items,
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,
@@ -173,6 +262,39 @@ func uniqueNonEmpty(items []string) []string {
 
 func likePattern(value string) string {
 	return "%" + value + "%"
+}
+
+func extractInboundName(subject string) string {
+	subject = strings.TrimSpace(subject)
+	if subject == "" || subject == "unknown" {
+		return "unknown"
+	}
+	if idx := strings.LastIndex(subject, " - "); idx >= 0 {
+		name := strings.TrimSpace(subject[:idx])
+		if name != "" {
+			return name
+		}
+	}
+	return subject
+}
+
+func firstCSV(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	if idx := strings.Index(value, ","); idx >= 0 {
+		value = strings.TrimSpace(value[:idx])
+	}
+	return emptyToUnknown(value)
+}
+
+func emptyToUnknown(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	return value
 }
 
 func parseAuditTimeFilter(value string) (int64, error) {

@@ -51,6 +51,7 @@ type AuditLoginLog struct {
 	Subject      string `json:"subject,omitempty" gorm:"size:255"`
 	SubID        string `json:"subId,omitempty" gorm:"index;size:255"`
 	ClientEmails string `json:"clientEmails,omitempty" gorm:"type:text"`
+	Inbound      string `json:"inbound,omitempty" gorm:"size:255"`
 	Destination  string `json:"destination,omitempty" gorm:"size:1024"`
 	RequestPath  string `json:"requestPath" gorm:"size:512"`
 	IPAddress    string `json:"ipAddress" gorm:"size:128"`

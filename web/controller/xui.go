@@ -31,6 +31,7 @@ func (a *XUIController) initRouter(g *gin.RouterGroup) {
 	g.GET("/inbounds", a.inbounds)
 	g.GET("/usage", a.usage)
 	g.GET("/audit", a.auditLogs)
+	g.GET("/access-logs", a.accessLogs)
 	g.GET("/settings", a.settings)
 	g.GET("/xray", a.xraySettings)
 
@@ -55,6 +56,10 @@ func (a *XUIController) usage(c *gin.Context) {
 // auditLogs renders the audit log page.
 func (a *XUIController) auditLogs(c *gin.Context) {
 	html(c, "audit.html", "Audit Logs", nil)
+}
+
+func (a *XUIController) accessLogs(c *gin.Context) {
+	html(c, "access_logs.html", "Access Logs", nil)
 }
 
 // settings renders the settings management page.

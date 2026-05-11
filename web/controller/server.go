@@ -51,6 +51,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getDb", a.getDb)
 	g.GET("/audit/logins", a.getAuditLogins)
+	g.GET("/access/logs", a.getAccessLogs)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getNewX25519Cert", a.getNewX25519Cert)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -316,8 +317,21 @@ func (a *ServerController) getAuditLogins(c *gin.Context) {
 		EventType: eventType,
 		IPAddress: c.DefaultQuery("ip", ""),
 		Subject:   c.DefaultQuery("subject", ""),
-		Dest:      c.DefaultQuery("dest", ""),
 		UserAgent: c.DefaultQuery("userAgent", ""),
+		From:      c.DefaultQuery("from", ""),
+		To:        c.DefaultQuery("to", ""),
+	})
+	jsonObj(c, logs, err)
+}
+
+func (a *ServerController) getAccessLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	logs, err := a.auditService.ListAccessPage(page, pageSize, service.AuditLogFilter{
+		IPAddress: c.DefaultQuery("source", ""),
+		Inbound:   c.DefaultQuery("inbound", ""),
+		Email:     c.DefaultQuery("email", ""),
+		Dest:      c.DefaultQuery("destination", ""),
 		From:      c.DefaultQuery("from", ""),
 		To:        c.DefaultQuery("to", ""),
 	})
