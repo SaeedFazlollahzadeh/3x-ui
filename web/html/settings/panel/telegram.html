@@ -61,7 +61,14 @@
             <template #title>{{ i18n "pages.settings.tgNotifyCpu" }}</template>
             <template #description>{{ i18n "pages.settings.tgNotifyCpuDesc" }}</template>
             <template #control>
-                <a-input-number :min="0" :min="100" v-model="allSetting.tgCpu" :style="{ width: '100%' }"></a-switch>
+                <a-input-number :min="0" :max="100" v-model="allSetting.tgCpu" :style="{ width: '100%' }"></a-input-number>
+            </template>
+        </a-setting-list-item>
+        <a-setting-list-item paddings="small">
+            <template #title>{{ i18n "pages.settings.tgNotifyRam" }}</template>
+            <template #description>{{ i18n "pages.settings.tgNotifyRamDesc" }}</template>
+            <template #control>
+                <a-input-number :min="0" :max="100" v-model="allSetting.tgRam" :style="{ width: '100%' }"></a-input-number>
             </template>
         </a-setting-list-item>
     </a-collapse-panel>

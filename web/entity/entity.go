@@ -46,6 +46,7 @@ type AllSetting struct {
 	TgBotBackup      bool   `json:"tgBotBackup" form:"tgBotBackup"`           // Enable database backup via Telegram
 	TgBotLoginNotify bool   `json:"tgBotLoginNotify" form:"tgBotLoginNotify"` // Send login notifications
 	TgCpu            int    `json:"tgCpu" form:"tgCpu"`                       // CPU usage threshold for alerts
+	TgRam            int    `json:"tgRam" form:"tgRam"`                       // RAM usage threshold for alerts
 	TgLang           string `json:"tgLang" form:"tgLang"`                     // Telegram bot language
 
 	// Security settings
