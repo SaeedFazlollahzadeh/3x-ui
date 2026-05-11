@@ -179,6 +179,7 @@ func (j *CheckClientIpJob) processLogFile() bool {
 			continue
 		}
 		email := emailMatches[1]
+		destination := parseDestinationFromAccessLog(line)
 
 		// Extract timestamp from log line
 		var timestamp int64
@@ -202,7 +203,7 @@ func (j *CheckClientIpJob) processLogFile() bool {
 			inboundClientIps[email][ip] = timestamp
 		}
 
-		j.logClientAccess(email, ip, timestamp)
+		j.logClientAccess(email, ip, destination, timestamp)
 	}
 	if err := scanner.Err(); err != nil {
 		j.checkError(err)
@@ -229,7 +230,7 @@ func (j *CheckClientIpJob) processLogFile() bool {
 	return shouldCleanLog
 }
 
-func (j *CheckClientIpJob) logClientAccess(email, ip string, timestamp int64) {
+func (j *CheckClientIpJob) logClientAccess(email, ip, destination string, timestamp int64) {
 	if timestamp <= 0 {
 		timestamp = time.Now().Unix()
 	}
@@ -258,6 +259,7 @@ func (j *CheckClientIpJob) logClientAccess(email, ip string, timestamp int64) {
 		ip,
 		"xray-access",
 		strconv.Itoa(inbound.Port),
+		destination,
 	); err != nil {
 		logger.Warning("failed to write client access audit log:", err)
 	}
@@ -270,6 +272,32 @@ func (j *CheckClientIpJob) logClientAccess(email, ip string, timestamp int64) {
 			}
 		}
 	}
+}
+
+func parseDestinationFromAccessLog(line string) string {
+	const acceptedMarker = " accepted "
+	acceptedAt := strings.Index(line, acceptedMarker)
+	if acceptedAt < 0 {
+		return "unknown"
+	}
+
+	destPart := line[acceptedAt+len(acceptedMarker):]
+	if emailAt := strings.LastIndex(destPart, " email: "); emailAt >= 0 {
+		destPart = destPart[:emailAt]
+	}
+	destPart = strings.TrimSpace(destPart)
+	if destPart == "" {
+		return "unknown"
+	}
+
+	// Strip the optional outbound detour suffix: " [tag]".
+	if idx := strings.LastIndex(destPart, " ["); idx >= 0 && strings.HasSuffix(destPart, "]") {
+		destPart = strings.TrimSpace(destPart[:idx])
+	}
+	if destPart == "" {
+		return "unknown"
+	}
+	return destPart
 }
 
 // mergeClientIps combines the persisted (old) and freshly observed (new)

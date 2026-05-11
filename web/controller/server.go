@@ -316,6 +316,7 @@ func (a *ServerController) getAuditLogins(c *gin.Context) {
 		EventType: eventType,
 		IPAddress: c.DefaultQuery("ip", ""),
 		Subject:   c.DefaultQuery("subject", ""),
+		Dest:      c.DefaultQuery("dest", ""),
 		UserAgent: c.DefaultQuery("userAgent", ""),
 		From:      c.DefaultQuery("from", ""),
 		To:        c.DefaultQuery("to", ""),

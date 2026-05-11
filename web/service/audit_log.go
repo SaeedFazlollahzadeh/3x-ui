@@ -25,6 +25,7 @@ type AuditLogFilter struct {
 	EventType string
 	IPAddress string
 	Subject   string
+	Dest      string
 	UserAgent string
 	From      string
 	To        string
@@ -38,6 +39,7 @@ func (s *AuditLogService) LogAdminLogin(username, ip, userAgent, requestPath str
 		EventType:   AuditEventAdminLogin,
 		Username:    strings.TrimSpace(username),
 		Subject:     strings.TrimSpace(username),
+		Destination: "unknown",
 		RequestPath: normalizeRequestPath(requestPath),
 		IPAddress:   normalizeAuditValue(ip, 128),
 		UserAgent:   normalizeAuditValue(userAgent, 2048),
@@ -45,12 +47,13 @@ func (s *AuditLogService) LogAdminLogin(username, ip, userAgent, requestPath str
 	})
 }
 
-func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEmails []string, ip, userAgent, requestPath string) error {
+func (s *AuditLogService) LogSubscriptionAccess(subject, subID string, clientEmails []string, ip, userAgent, requestPath, destination string) error {
 	return s.create(model.AuditLoginLog{
 		EventType:    AuditEventSubscriptionLogin,
 		Subject:      normalizeAuditValue(subject, 255),
 		SubID:        strings.TrimSpace(subID),
 		ClientEmails: strings.Join(uniqueNonEmpty(clientEmails), ", "),
+		Destination:  normalizeAuditValue(destination, 1024),
 		RequestPath:  normalizeRequestPath(requestPath),
 		IPAddress:    normalizeAuditValue(ip, 128),
 		UserAgent:    normalizeAuditValue(userAgent, 2048),
@@ -71,6 +74,9 @@ func (s *AuditLogService) ListPage(page, pageSize int, filter AuditLogFilter) (*
 	}
 	if value := strings.TrimSpace(filter.Subject); value != "" {
 		query = query.Where("LOWER(subject) LIKE ?", likePattern(strings.ToLower(value)))
+	}
+	if value := strings.TrimSpace(filter.Dest); value != "" {
+		query = query.Where("LOWER(destination) LIKE ?", likePattern(strings.ToLower(value)))
 	}
 	if value := strings.TrimSpace(filter.UserAgent); value != "" {
 		query = query.Where("LOWER(user_agent) LIKE ?", likePattern(strings.ToLower(value)))

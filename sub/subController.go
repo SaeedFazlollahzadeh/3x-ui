@@ -244,6 +244,7 @@ func (a *SUBController) logSubscriptionAccess(c *gin.Context, subID string) {
 			getRemoteIP(c),
 			c.Request.UserAgent(),
 			strconv.Itoa(target.Port),
+			"unknown",
 		); err != nil {
 			logger.Warning("unable to write subscription audit log:", err)
 		}
