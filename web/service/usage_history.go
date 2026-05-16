@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v2/database"
-	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/xray"
+	"github.com/mhsanaei/3x-ui/v3/database"
+	"github.com/mhsanaei/3x-ui/v3/database/model"
+	"github.com/mhsanaei/3x-ui/v3/xray"
 	"gorm.io/gorm/clause"
 )
 

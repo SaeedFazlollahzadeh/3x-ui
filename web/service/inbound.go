@@ -1489,6 +1489,10 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 		}
 	}
 	needRestart := false
+	cipher := ""
+	if oldInbound.Protocol == "shadowsocks" {
+		cipher = oldSettings["method"].(string)
+	}
 	if len(oldEmail) > 0 {
 		rt, rterr := s.runtimeFor(oldInbound)
 		if rterr != nil {
@@ -1510,10 +1514,6 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 				}
 			}
 			if clients[0].Enable {
-				cipher := ""
-				if oldInbound.Protocol == "shadowsocks" {
-					cipher = oldSettings["method"].(string)
-				}
 				err1 := rt.AddUser(context.Background(), oldInbound, map[string]any{
 					"email":    clients[0].Email,
 					"id":       clients[0].ID,

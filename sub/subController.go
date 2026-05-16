@@ -10,10 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhsanaei/3x-ui/v2/config"
-	"github.com/mhsanaei/3x-ui/v2/logger"
-	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v3/web/service"
+	"github.com/mhsanaei/3x-ui/v3/config"
+	"github.com/mhsanaei/3x-ui/v3/logger"
 
 	"github.com/gin-gonic/gin"
 )
