@@ -20,6 +20,10 @@ import (
 	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v2/xray"
+	"github.com/mhsanaei/3x-ui/v3/database"
+	"github.com/mhsanaei/3x-ui/v3/database/model"
+	"github.com/mhsanaei/3x-ui/v3/logger"
+	"github.com/mhsanaei/3x-ui/v3/xray"
 )
 
 // IPWithTimestamp tracks an IP address with its last seen timestamp
@@ -185,7 +189,7 @@ func (j *CheckClientIpJob) processLogFile() bool {
 		var timestamp int64
 		timestampMatches := timestampRegex.FindStringSubmatch(line)
 		if len(timestampMatches) >= 2 {
-			t, err := time.Parse("2006/01/02 15:04:05", timestampMatches[1])
+			t, err := time.ParseInLocation("2006/01/02 15:04:05", timestampMatches[1], time.Local)
 			if err == nil {
 				timestamp = t.Unix()
 			} else {

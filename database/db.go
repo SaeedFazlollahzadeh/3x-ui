@@ -6,16 +6,17 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"path"
 	"slices"
+	"strings"
+	"time"
 
-	"github.com/mhsanaei/3x-ui/v2/config"
-	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/util/crypto"
-	"github.com/mhsanaei/3x-ui/v2/xray"
+	"github.com/mhsanaei/3x-ui/v3/config"
+	"github.com/mhsanaei/3x-ui/v3/database/model"
+	"github.com/mhsanaei/3x-ui/v3/util/crypto"
+	"github.com/mhsanaei/3x-ui/v3/xray"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -42,14 +43,41 @@ func initModels() error {
 		&xray.ClientTraffic{},
 		&model.HistoryOfSeeders{},
 		&model.CustomGeoResource{},
+		&model.Node{},
+		&model.ApiToken{},
 	}
-	for _, model := range models {
-		if err := db.AutoMigrate(model); err != nil {
+	for _, mdl := range models {
+		if err := db.AutoMigrate(mdl); err != nil {
+			if isIgnorableDuplicateColumnErr(err, mdl) {
+				log.Printf("Ignoring duplicate column during auto migration for %T: %v", mdl, err)
+				continue
+			}
 			log.Printf("Error auto migrating model: %v", err)
 			return err
 		}
 	}
 	return nil
+}
+
+func isIgnorableDuplicateColumnErr(err error, mdl any) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	const dupPrefix = "duplicate column name:"
+	if !strings.Contains(errMsg, dupPrefix) {
+		return false
+	}
+	idx := strings.Index(errMsg, dupPrefix)
+	if idx < 0 {
+		return false
+	}
+	col := strings.TrimSpace(errMsg[idx+len(dupPrefix):])
+	col = strings.Trim(col, "`\"[]")
+	if col == "" {
+		return false
+	}
+	return db != nil && db.Migrator().HasColumn(mdl, col)
 }
 
 // initUser creates a default admin user if the users table is empty.
@@ -88,32 +116,78 @@ func runSeeders(isUsersEmpty bool) error {
 		hashSeeder := &model.HistoryOfSeeders{
 			SeederName: "UserPasswordHash",
 		}
-		return db.Create(hashSeeder).Error
-	} else {
-		var seedersHistory []string
-		db.Model(&model.HistoryOfSeeders{}).Pluck("seeder_name", &seedersHistory)
+		if err := db.Create(hashSeeder).Error; err != nil {
+			return err
+		}
+		return seedApiTokens()
+	}
 
-		if !slices.Contains(seedersHistory, "UserPasswordHash") && !isUsersEmpty {
-			var users []model.User
-			db.Find(&users)
+	var seedersHistory []string
+	if err := db.Model(&model.HistoryOfSeeders{}).Pluck("seeder_name", &seedersHistory).Error; err != nil {
+		log.Printf("Error fetching seeder history: %v", err)
+		return err
+	}
 
-			for _, user := range users {
-				hashedPassword, err := crypto.HashPasswordAsBcrypt(user.Password)
-				if err != nil {
-					log.Printf("Error hashing password for user '%s': %v", user.Username, err)
-					return err
-				}
-				db.Model(&user).Update("password", hashedPassword)
+	if !slices.Contains(seedersHistory, "UserPasswordHash") && !isUsersEmpty {
+		var users []model.User
+		if err := db.Find(&users).Error; err != nil {
+			log.Printf("Error fetching users for password migration: %v", err)
+			return err
+		}
+
+		for _, user := range users {
+			hashedPassword, err := crypto.HashPasswordAsBcrypt(user.Password)
+			if err != nil {
+				log.Printf("Error hashing password for user '%s': %v", user.Username, err)
+				return err
 			}
-
-			hashSeeder := &model.HistoryOfSeeders{
-				SeederName: "UserPasswordHash",
+			if err := db.Model(&user).Update("password", hashedPassword).Error; err != nil {
+				log.Printf("Error updating password for user '%s': %v", user.Username, err)
+				return err
 			}
-			return db.Create(hashSeeder).Error
+		}
+
+		hashSeeder := &model.HistoryOfSeeders{
+			SeederName: "UserPasswordHash",
+		}
+		if err := db.Create(hashSeeder).Error; err != nil {
+			return err
 		}
 	}
 
+	if !slices.Contains(seedersHistory, "ApiTokensTable") {
+		if err := seedApiTokens(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// seedApiTokens copies the legacy `apiToken` setting into the new
+// api_tokens table as a row named "default" so existing central panels
+// keep working after the upgrade. Idempotent — records itself in
+// history_of_seeders and only runs when api_tokens is empty.
+func seedApiTokens() error {
+	empty, err := isTableEmpty("api_tokens")
+	if err != nil {
+		return err
+	}
+	if empty {
+		var legacy model.Setting
+		err := db.Model(model.Setting{}).Where("key = ?", "apiToken").First(&legacy).Error
+		if err == nil && legacy.Value != "" {
+			row := &model.ApiToken{
+				Name:    "default",
+				Token:   legacy.Value,
+				Enabled: true,
+			}
+			if err := db.Create(row).Error; err != nil {
+				log.Printf("Error migrating legacy apiToken: %v", err)
+				return err
+			}
+		}
+	}
+	return db.Create(&model.HistoryOfSeeders{SeederName: "ApiTokensTable"}).Error
 }
 
 // isTableEmpty returns true if the named table contains zero rows.
@@ -126,7 +200,7 @@ func isTableEmpty(tableName string) (bool, error) {
 // InitDB sets up the database connection, migrates models, and runs seeders.
 func InitDB(dbPath string) error {
 	dir := path.Dir(dbPath)
-	err := os.MkdirAll(dir, fs.ModePerm)
+	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return err
 	}
@@ -142,10 +216,28 @@ func InitDB(dbPath string) error {
 	c := &gorm.Config{
 		Logger: gormLogger,
 	}
-	db, err = gorm.Open(sqlite.Open(dbPath), c)
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=10000&_synchronous=NORMAL&_txlock=immediate"
+	db, err = gorm.Open(sqlite.Open(dsn), c)
 	if err != nil {
 		return err
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec("PRAGMA busy_timeout=10000"); err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		return err
+	}
+	sqlDB.SetMaxOpenConns(8)
+	sqlDB.SetMaxIdleConns(4)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	if err := initModels(); err != nil {
 		return err

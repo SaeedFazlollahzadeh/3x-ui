@@ -3,13 +3,15 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/web/service"
-	"github.com/mhsanaei/3x-ui/v2/web/session"
-	"github.com/mhsanaei/3x-ui/v2/web/websocket"
+	"github.com/mhsanaei/3x-ui/v3/database/model"
+	"github.com/mhsanaei/3x-ui/v3/web/service"
+	"github.com/mhsanaei/3x-ui/v3/web/session"
+	"github.com/mhsanaei/3x-ui/v3/web/websocket"
 
 	"github.com/gin-gonic/gin"
 )
@@ -65,6 +67,8 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/:id/clientUsageHistory/:email", a.getClientUsageHistory)
 	g.GET("/dailyUsage", a.getDailyUsage)
 	g.GET("/subDailyUsage/:subId", a.getSubDailyUsage)
+	g.GET("/getSubLinks/:subId", a.getSubLinks)
+	g.GET("/getClientLinks/:id/:email", a.getClientLinks)
 
 	g.POST("/add", a.addInbound)
 	g.POST("/del/:id", a.delInbound)
@@ -76,6 +80,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.POST("/:id/copyClients", a.copyInboundClients)
 	g.POST("/:id/delClient/:clientId", a.delInboundClient)
 	g.POST("/updateClient/:clientId", a.updateInboundClient)
+	g.POST("/:id/resetTraffic", a.resetInboundTraffic)
 	g.POST("/:id/resetClientTraffic/:email", a.resetClientTraffic)
 	g.POST("/resetAllTraffics", a.resetAllTraffics)
 	g.POST("/resetAllClientTraffics/:id", a.resetAllClientTraffics)
@@ -195,10 +200,23 @@ func (a *InboundController) addInbound(c *gin.Context) {
 	}
 	user := session.GetLoginUser(c)
 	inbound.UserId = user.Id
-	if inbound.Listen == "" || inbound.Listen == "0.0.0.0" || inbound.Listen == "::" || inbound.Listen == "::0" {
-		inbound.Tag = fmt.Sprintf("inbound-%v", inbound.Port)
-	} else {
-		inbound.Tag = fmt.Sprintf("inbound-%v:%v", inbound.Listen, inbound.Port)
+	// Treat NodeID=0 as "no node" — gin's *int form binding can land on
+	// 0 when the field is absent or empty, and 0 is never a valid Node
+	// row id. Without this normalization the runtime layer would try to
+	// load Node id=0 and surface "record not found".
+	if inbound.NodeID != nil && *inbound.NodeID == 0 {
+		inbound.NodeID = nil
+	}
+	// When the central panel deploys an inbound to a remote node, it sends
+	// the Tag pre-computed (so both DBs agree on the identifier). Local
+	// UI submits don't include a Tag — we compute one from listen+port
+	// using the original collision-avoiding scheme.
+	if inbound.Tag == "" {
+		if inbound.Listen == "" || inbound.Listen == "0.0.0.0" || inbound.Listen == "::" || inbound.Listen == "::0" {
+			inbound.Tag = fmt.Sprintf("inbound-%v", inbound.Port)
+		} else {
+			inbound.Tag = fmt.Sprintf("inbound-%v:%v", inbound.Listen, inbound.Port)
+		}
 	}
 
 	inbound, needRestart, err := a.inboundService.AddInbound(inbound)
@@ -247,6 +265,13 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), err)
 		return
+	}
+	// Same NodeID=0 → nil normalisation as addInbound. UpdateInbound
+	// loads the existing row's NodeID from DB anyway (Phase 1 doesn't
+	// support migrating an inbound between nodes), but normalising here
+	// keeps the wire shape consistent.
+	if inbound.NodeID != nil && *inbound.NodeID == 0 {
+		inbound.NodeID = nil
 	}
 	inbound, needRestart, err := a.inboundService.UpdateInbound(inbound)
 	if err != nil {
@@ -464,6 +489,24 @@ func (a *InboundController) resetClientTraffic(c *gin.Context) {
 	}
 }
 
+// resetInboundTraffic resets traffic counters for a specific inbound.
+func (a *InboundController) resetInboundTraffic(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), err)
+		return
+	}
+
+	err = a.inboundService.ResetInboundTraffic(id)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	} else {
+		a.xrayService.SetToNeedRestart()
+	}
+	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.resetInboundTrafficSuccess"), nil)
+}
+
 // resetAllTraffics resets all traffic counters across all inbounds.
 func (a *InboundController) resetAllTraffics(c *gin.Context) {
 	err := a.inboundService.ResetAllTraffics()
@@ -505,10 +548,12 @@ func (a *InboundController) importInbound(c *gin.Context) {
 	user := session.GetLoginUser(c)
 	inbound.Id = 0
 	inbound.UserId = user.Id
-	if inbound.Listen == "" || inbound.Listen == "0.0.0.0" || inbound.Listen == "::" || inbound.Listen == "::0" {
-		inbound.Tag = fmt.Sprintf("inbound-%v", inbound.Port)
-	} else {
-		inbound.Tag = fmt.Sprintf("inbound-%v:%v", inbound.Listen, inbound.Port)
+	if inbound.Tag == "" {
+		if inbound.Listen == "" || inbound.Listen == "0.0.0.0" || inbound.Listen == "::" || inbound.Listen == "::0" {
+			inbound.Tag = fmt.Sprintf("inbound-%v", inbound.Port)
+		} else {
+			inbound.Tag = fmt.Sprintf("inbound-%v:%v", inbound.Listen, inbound.Port)
+		}
 	}
 
 	for index := range inbound.ClientStats {
@@ -595,4 +640,58 @@ func (a *InboundController) delInboundClientByEmail(c *gin.Context) {
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
+}
+
+// resolveHost mirrors what sub.SubService.ResolveRequest does for the host
+// field: prefers X-Forwarded-Host (first entry of any list, port stripped),
+// then X-Real-IP, then the host portion of c.Request.Host. Keeping it in the
+// controller layer means the service interface stays HTTP-agnostic — service
+// methods receive a plain host string instead of a *gin.Context.
+func resolveHost(c *gin.Context) string {
+	if isTrustedForwardedRequest(c) {
+		if h := strings.TrimSpace(c.GetHeader("X-Forwarded-Host")); h != "" {
+			if i := strings.Index(h, ","); i >= 0 {
+				h = strings.TrimSpace(h[:i])
+			}
+			if hp, _, err := net.SplitHostPort(h); err == nil {
+				return hp
+			}
+			return h
+		}
+		if h := c.GetHeader("X-Real-IP"); h != "" {
+			return h
+		}
+	}
+	if h, _, err := net.SplitHostPort(c.Request.Host); err == nil {
+		return h
+	}
+	return c.Request.Host
+}
+
+// getSubLinks returns every protocol URL produced for the given subscription
+// ID — the JSON-array equivalent of /sub/<subId> (no base64 wrap).
+func (a *InboundController) getSubLinks(c *gin.Context) {
+	links, err := a.inboundService.GetSubLinks(resolveHost(c), c.Param("subId"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, links, nil)
+}
+
+// getClientLinks returns the URL(s) for one client on one inbound — the same
+// string the Copy URL button copies in the panel UI. Empty array when the
+// protocol has no URL form, or when the email isn't found on the inbound.
+func (a *InboundController) getClientLinks(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "get"), err)
+		return
+	}
+	links, err := a.inboundService.GetClientLinks(resolveHost(c), id, c.Param("email"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.obtain"), err)
+		return
+	}
+	jsonObj(c, links, nil)
 }

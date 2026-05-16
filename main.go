@@ -11,15 +11,15 @@ import (
 	"syscall"
 	_ "unsafe"
 
-	"github.com/mhsanaei/3x-ui/v2/config"
-	"github.com/mhsanaei/3x-ui/v2/database"
-	"github.com/mhsanaei/3x-ui/v2/logger"
-	"github.com/mhsanaei/3x-ui/v2/sub"
-	"github.com/mhsanaei/3x-ui/v2/util/crypto"
-	"github.com/mhsanaei/3x-ui/v2/util/sys"
-	"github.com/mhsanaei/3x-ui/v2/web"
-	"github.com/mhsanaei/3x-ui/v2/web/global"
-	"github.com/mhsanaei/3x-ui/v2/web/service"
+	"github.com/mhsanaei/3x-ui/v3/config"
+	"github.com/mhsanaei/3x-ui/v3/database"
+	"github.com/mhsanaei/3x-ui/v3/logger"
+	"github.com/mhsanaei/3x-ui/v3/sub"
+	"github.com/mhsanaei/3x-ui/v3/util/crypto"
+	"github.com/mhsanaei/3x-ui/v3/util/sys"
+	"github.com/mhsanaei/3x-ui/v3/web"
+	"github.com/mhsanaei/3x-ui/v3/web/global"
+	"github.com/mhsanaei/3x-ui/v3/web/service"
 
 	"github.com/joho/godotenv"
 	"github.com/op/go-logging"
@@ -61,6 +61,8 @@ func runWebServer() {
 	}
 
 	var subServer *sub.Server
+	sub.SetDistFS(web.EmbeddedDist())
+	service.RegisterSubLinkProvider(sub.NewLinkProvider())
 	subServer = sub.NewServer()
 	global.SetSubServer(subServer)
 	err = subServer.Start()
@@ -79,11 +81,7 @@ func runWebServer() {
 		case syscall.SIGHUP:
 			logger.Info("Received SIGHUP signal. Restarting servers...")
 
-			// --- FIX FOR TELEGRAM BOT CONFLICT (409): Stop bot before restart ---
-			service.StopBot()
-			// --
-
-			err := server.Stop()
+			err := server.StopPanelOnly()
 			if err != nil {
 				logger.Debug("Error stopping web server:", err)
 			}
@@ -94,13 +92,14 @@ func runWebServer() {
 
 			server = web.NewServer()
 			global.SetWebServer(server)
-			err = server.Start()
+			err = server.StartPanelOnly()
 			if err != nil {
 				log.Fatalf("Error restarting web server: %v", err)
 				return
 			}
 			log.Println("Web server restarted successfully.")
 
+			sub.SetDistFS(web.EmbeddedDist())
 			subServer = sub.NewServer()
 			global.SetSubServer(subServer)
 			err = subServer.Start()
@@ -392,6 +391,28 @@ func GetListenIP(getListen bool) {
 	}
 }
 
+func GetApiToken(getApiToken bool) {
+	if !getApiToken {
+		return
+	}
+	apiTokenService := service.ApiTokenService{}
+	tokens, err := apiTokenService.List()
+	if err != nil {
+		fmt.Println("get apiToken failed, error info:", err)
+		return
+	}
+	if len(tokens) > 0 {
+		fmt.Println("apiToken:", tokens[0].Token)
+		return
+	}
+	created, err := apiTokenService.Create("install")
+	if err != nil {
+		fmt.Println("create apiToken failed, error info:", err)
+		return
+	}
+	fmt.Println("apiToken:", created.Token)
+}
+
 // migrateDb performs database migration operations for the 3x-ui panel.
 func migrateDb() {
 	inboundService := service.InboundService{}
@@ -434,6 +455,7 @@ func main() {
 	var reset bool
 	var show bool
 	var getCert bool
+	var getApiToken bool
 	var resetTwoFactor bool
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
@@ -445,6 +467,7 @@ func main() {
 	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "Reset two-factor authentication settings")
 	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
 	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
+	settingCmd.BoolVar(&getApiToken, "getApiToken", false, "Display current API token")
 	settingCmd.StringVar(&webCertFile, "webCert", "", "Set path to public key file for panel")
 	settingCmd.StringVar(&webKeyFile, "webCertKey", "", "Set path to private key file for panel")
 	settingCmd.StringVar(&tgbottoken, "tgbottoken", "", "Set token for Telegram bot")
@@ -501,6 +524,9 @@ func main() {
 		}
 		if getCert {
 			GetCertificate(getCert)
+		}
+		if getApiToken {
+			GetApiToken(getApiToken)
 		}
 		if (tgbottoken != "") || (tgbotchatid != "") || (tgbotRuntime != "") {
 			updateTgbotSetting(tgbottoken, tgbotchatid, tgbotRuntime)

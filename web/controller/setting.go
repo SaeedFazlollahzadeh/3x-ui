@@ -2,12 +2,13 @@ package controller
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v2/util/crypto"
-	"github.com/mhsanaei/3x-ui/v2/web/entity"
-	"github.com/mhsanaei/3x-ui/v2/web/service"
-	"github.com/mhsanaei/3x-ui/v2/web/session"
+	"github.com/mhsanaei/3x-ui/v3/util/crypto"
+	"github.com/mhsanaei/3x-ui/v3/web/entity"
+	"github.com/mhsanaei/3x-ui/v3/web/service"
+	"github.com/mhsanaei/3x-ui/v3/web/session"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,9 +23,10 @@ type updateUserForm struct {
 
 // SettingController handles settings and user management operations.
 type SettingController struct {
-	settingService service.SettingService
-	userService    service.UserService
-	panelService   service.PanelService
+	settingService  service.SettingService
+	userService     service.UserService
+	panelService    service.PanelService
+	apiTokenService service.ApiTokenService
 }
 
 // NewSettingController creates a new SettingController and initializes its routes.
@@ -44,6 +46,10 @@ func (a *SettingController) initRouter(g *gin.RouterGroup) {
 	g.POST("/updateUser", a.updateUser)
 	g.POST("/restartPanel", a.restartPanel)
 	g.GET("/getDefaultJsonConfig", a.getDefaultXrayConfig)
+	g.GET("/apiTokens", a.listApiTokens)
+	g.POST("/apiTokens/create", a.createApiToken)
+	g.POST("/apiTokens/delete/:id", a.deleteApiToken)
+	g.POST("/apiTokens/setEnabled/:id", a.setApiTokenEnabled)
 }
 
 // getAllSetting retrieves all current settings.
@@ -74,7 +80,13 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
 	}
+	oldTwoFactor, twoFactorErr := a.settingService.GetTwoFactorEnable()
 	err = a.settingService.UpdateAllSetting(allSetting)
+	if err == nil && twoFactorErr == nil && !oldTwoFactor && allSetting.TwoFactorEnable {
+		if bumpErr := a.userService.BumpLoginEpoch(); bumpErr != nil {
+			err = bumpErr
+		}
+	}
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 }
 
@@ -120,4 +132,58 @@ func (a *SettingController) getDefaultXrayConfig(c *gin.Context) {
 		return
 	}
 	jsonObj(c, defaultJsonConfig, nil)
+}
+
+type apiTokenCreateForm struct {
+	Name string `json:"name" form:"name"`
+}
+
+type apiTokenEnabledForm struct {
+	Enabled bool `json:"enabled" form:"enabled"`
+}
+
+func (a *SettingController) listApiTokens(c *gin.Context) {
+	rows, err := a.apiTokenService.List()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.getSettings"), err)
+		return
+	}
+	jsonObj(c, rows, nil)
+}
+
+func (a *SettingController) createApiToken(c *gin.Context) {
+	form := &apiTokenCreateForm{}
+	if err := c.ShouldBind(form); err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+		return
+	}
+	row, err := a.apiTokenService.Create(form.Name)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+		return
+	}
+	jsonObj(c, row, nil)
+}
+
+func (a *SettingController) deleteApiToken(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), a.apiTokenService.Delete(id))
+}
+
+func (a *SettingController) setApiTokenEnabled(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+		return
+	}
+	form := &apiTokenEnabledForm{}
+	if bindErr := c.ShouldBind(form); bindErr != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), bindErr)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), a.apiTokenService.SetEnabled(id, form.Enabled))
 }
