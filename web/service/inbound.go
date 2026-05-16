@@ -1546,6 +1546,7 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 			} else {
 				logger.Debug("Error in adding client by api:", err1)
 				needRestart = true
+			}
 		} else {
 			if err1 := rt.UpdateInbound(context.Background(), oldInbound, oldInbound); err1 != nil {
 				err = err1
