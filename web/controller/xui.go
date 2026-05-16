@@ -71,16 +71,16 @@ func (a *XUIController) nodes(c *gin.Context) {
 }
 
 func (a *XUIController) usage(c *gin.Context) {
-	html(c, "usage.html", "Usage", nil)
+	serveDistPage(c, "usage.html")
 }
 
 // auditLogs renders the audit log page.
 func (a *XUIController) auditLogs(c *gin.Context) {
-	html(c, "audit.html", "Audit Logs", nil)
+	serveDistPage(c, "audit.html")
 }
 
 func (a *XUIController) accessLogs(c *gin.Context) {
-	html(c, "access_logs.html", "Access Logs", nil)
+	serveDistPage(c, "access_logs.html")
 }
 
 // settings renders the settings management page.

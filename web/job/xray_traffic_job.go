@@ -135,6 +135,26 @@ func (j *XrayTrafficJob) Run() {
 	}
 }
 
+func activeEmails(clientTraffics []*xray.ClientTraffic) []string {
+	if len(clientTraffics) == 0 {
+		return nil
+	}
+
+	emails := make([]string, 0, len(clientTraffics))
+	seen := make(map[string]struct{}, len(clientTraffics))
+	for _, traffic := range clientTraffics {
+		if traffic == nil || traffic.Email == "" {
+			continue
+		}
+		if _, ok := seen[traffic.Email]; ok {
+			continue
+		}
+		seen[traffic.Email] = struct{}{}
+		emails = append(emails, traffic.Email)
+	}
+	return emails
+}
+
 func (j *XrayTrafficJob) informTrafficToExternalAPI(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) {
 	informURL, err := j.settingService.GetExternalTrafficInformURI()
 	if err != nil {

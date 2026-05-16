@@ -10,9 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhsanaei/3x-ui/v3/web/service"
-	"github.com/mhsanaei/3x-ui/v3/config"
 	"github.com/mhsanaei/3x-ui/v3/logger"
+	"github.com/mhsanaei/3x-ui/v3/web/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -133,9 +132,6 @@ func (a *SUBController) subs(c *gin.Context) {
 
 		// If the request expects HTML (e.g., browser) or explicitly asked (?html=1 or ?view=html), render the info page here
 		if wantsHTML(c) {
-			// Build page data in service
-		accept := c.GetHeader("Accept")
-		if strings.Contains(strings.ToLower(accept), "text/html") || c.Query("html") == "1" || strings.EqualFold(c.Query("view"), "html") {
 			subURL, subJsonURL, subClashURL := a.subService.BuildURLs(scheme, hostWithPort, a.subPath, a.subJsonPath, a.subClashPath, subId)
 			if !a.jsonEnabled {
 				subJsonURL = ""
@@ -154,31 +150,6 @@ func (a *SUBController) subs(c *gin.Context) {
 				// Remove trailing slash if exists, add subId, then add trailing slash
 				basePathStr = strings.TrimRight(basePathStr, "/") + "/" + subId + "/"
 			}
-			page := a.subService.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, subURL, subJsonURL, subClashURL, basePathStr)
-			a.logSubscriptionAccess(c, subId)
-			c.HTML(200, "subpage.html", gin.H{
-				"title":        "subscription.title",
-				"cur_ver":      config.GetVersion(),
-				"host":         page.Host,
-				"base_path":    page.BasePath,
-				"sId":          page.SId,
-				"enabled":      page.Enabled,
-				"download":     page.Download,
-				"upload":       page.Upload,
-				"total":        page.Total,
-				"used":         page.Used,
-				"remained":     page.Remained,
-				"expire":       page.Expire,
-				"lastOnline":   page.LastOnline,
-				"datepicker":   page.Datepicker,
-				"downloadByte": page.DownloadByte,
-				"uploadByte":   page.UploadByte,
-				"totalByte":    page.TotalByte,
-				"subUrl":       page.SubUrl,
-				"subJsonUrl":   page.SubJsonUrl,
-				"subClashUrl":  page.SubClashUrl,
-				"result":       page.Result,
-			})
 			page := a.subService.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, subURL, subJsonURL, subClashURL, basePathStr, a.subTitle, a.subSupportUrl)
 			a.serveSubPage(c, basePathStr, page)
 			return
