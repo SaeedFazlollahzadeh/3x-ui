@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [ "${BASH_SOURCE:-}" != "$0" ]; then
+    echo "Run this installer as ./saeedinstall.sh." >&2
+    return 0
+fi
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +38,7 @@ HELP
 esac
 (( $# <= 1 )) || { echo "Usage: $0 [--build-only] [bundle-directory]" >&2; exit 2; }
 bundle="${1:-$bundle}"
-fail() { echo "$*" >&2; exit 1; }
+fail() { echo "$*" >&2; return 1; }
 
 [[ "$(uname -s)" == Linux ]] || fail "Run this script on the target Linux architecture."
 if [[ "$mode" == install ]]; then
