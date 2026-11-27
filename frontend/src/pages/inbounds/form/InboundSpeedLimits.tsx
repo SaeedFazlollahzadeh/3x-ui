@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Form, InputNumber, Modal, Select, Space } from 'antd';
+import { Alert, Button, Form, Modal, Select, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { getSpeedLimits, saveSpeedLimit, type SpeedLimit } from '@/lib/clients/speed-limits';
+import SpeedLimitFields from '@/components/clients/SpeedLimitFields';
+import {
+  getSpeedLimits,
+  saveSpeedLimit,
+  speedLimitRate,
+  unlimitedSpeedLimit,
+  type SpeedLimit,
+} from '@/lib/clients/speed-limits';
 
 interface Props {
   id: number;
@@ -15,7 +22,7 @@ export default function InboundSpeedLimits({ id, clientEmail, label, zIndex }: P
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<SpeedLimit[]>([]);
   const [selected, setSelected] = useState(0);
-  const [rate, setRate] = useState<number | null>(0);
+  const [rate, setRate] = useState(unlimitedSpeedLimit);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const title = t('pages.inbounds.speedLimits');
@@ -38,7 +45,7 @@ export default function InboundSpeedLimits({ id, clientEmail, label, zIndex }: P
           }
           setRows(options);
           setSelected(options[0].clientId);
-          setRate(options[0].bytesPerSecond / 1_000_000);
+          setRate(speedLimitRate(options[0]));
         } else {
           setError(result?.msg || t('pages.inbounds.speedLimitError'));
         }
@@ -59,7 +66,7 @@ export default function InboundSpeedLimits({ id, clientEmail, label, zIndex }: P
     setError('');
     setRows([]);
     setSelected(0);
-    setRate(0);
+    setRate(unlimitedSpeedLimit);
     setOpen(true);
   }
 
@@ -67,7 +74,7 @@ export default function InboundSpeedLimits({ id, clientEmail, label, zIndex }: P
     setPending(true);
     setError('');
     try {
-      const result = await saveSpeedLimit(id, selected, rate ?? 0);
+      const result = await saveSpeedLimit(id, selected, rate);
       if (result?.success) {
         setOpen(false);
       } else {
@@ -115,22 +122,11 @@ export default function InboundSpeedLimits({ id, clientEmail, label, zIndex }: P
               }))}
               onChange={(clientId) => {
                 setSelected(clientId);
-                setRate(
-                  (rows.find((row) => row.clientId === clientId)?.bytesPerSecond ?? 0) / 1_000_000,
-                );
+                setRate(speedLimitRate(rows.find((row) => row.clientId === clientId)));
               }}
             />
           )}
-          <InputNumber
-            aria-label={t('pages.inbounds.speedLimitRate')}
-            suffix="MB/s"
-            min={0}
-            max={1000}
-            step={0.01}
-            value={rate}
-            disabled={pending || !rows.length}
-            onChange={setRate}
-          />
+          <SpeedLimitFields value={rate} onChange={setRate} disabled={pending || !rows.length} />
         </Space>
       </Modal>
     </>

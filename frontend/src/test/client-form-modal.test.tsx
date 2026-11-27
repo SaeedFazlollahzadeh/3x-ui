@@ -74,6 +74,6 @@ describe('ClientFormModal credential tooltips', () => {
 
 it('shows the speed limit field on the add client form before selecting an inbound', () => {
   renderModal();
-  const rate = screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Speed in MB/s' });
+  const rate = screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Upload limit' });
   expect(rate.disabled).toBe(true);
 });

@@ -687,7 +687,7 @@ func CheckSpeedLimitSupport(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, xrayVersionTimeout)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, GetBinaryPath(), "--xui-speed-limit-support").Output()
-	if err != nil || strings.TrimSpace(string(output)) != "xui-speed-limits-v1" {
+	if err != nil || strings.TrimSpace(string(output)) != "xui-speed-limits-v2" {
 		return errors.New("speed limits require the Xray core built by saeedinstall.sh")
 	}
 	return nil

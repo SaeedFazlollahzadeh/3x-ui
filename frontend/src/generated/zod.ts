@@ -968,7 +968,9 @@ export type InboundOption = z.infer<typeof InboundOptionSchema>;
 export const InboundSpeedLimitEntrySchema = z.object({
   bytesPerSecond: z.number().int(),
   clientId: z.number().int(),
+  downloadBytesPerSecond: z.number().int(),
   email: z.string(),
+  uploadBytesPerSecond: z.number().int(),
 });
 export type InboundSpeedLimitEntry = z.infer<typeof InboundSpeedLimitEntrySchema>;
 

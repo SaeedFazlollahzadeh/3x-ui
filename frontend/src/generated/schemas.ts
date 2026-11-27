@@ -4034,14 +4034,22 @@ export const SCHEMAS: Record<string, unknown> = {
       "clientId": {
         "type": "integer"
       },
+      "downloadBytesPerSecond": {
+        "type": "integer"
+      },
       "email": {
         "type": "string"
+      },
+      "uploadBytesPerSecond": {
+        "type": "integer"
       }
     },
     "required": [
       "bytesPerSecond",
       "clientId",
-      "email"
+      "downloadBytesPerSecond",
+      "email",
+      "uploadBytesPerSecond"
     ],
     "type": "object"
   },

@@ -1,5 +1,11 @@
+import SpeedLimitFields from '@/components/clients/SpeedLimitFields';
 import InboundSpeedLimits from '@/pages/inbounds/form/InboundSpeedLimits';
-import { getSpeedLimits, saveSpeedLimit, supportsSpeedLimits } from '@/lib/clients/speed-limits';
+import {
+  getSpeedLimits,
+  saveSpeedLimit,
+  supportsSpeedLimits,
+  unlimitedSpeedLimit,
+} from '@/lib/clients/speed-limits';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -256,7 +262,7 @@ export default function ClientFormModal({
   const uid = useId();
   const [messageApi, messageContextHolder] = message.useMessage();
   const isEdit = mode === 'edit';
-  const [newSpeedLimit, setNewSpeedLimit] = useState(0);
+  const [newSpeedLimit, setNewSpeedLimit] = useState(unlimitedSpeedLimit);
   const minWireguardDeviceLimit = Math.max(1, (client?.wireguardDevices?.length ?? 0) + 1);
 
   const methods = useForm<Values>({ defaultValues: EMPTY });
@@ -876,7 +882,7 @@ export default function ClientFormModal({
         );
       }
       if (msg?.success) {
-        if (!isEdit && newSpeedLimit > 0) {
+        if (!isEdit && (newSpeedLimit.upload > 0 || newSpeedLimit.download > 0)) {
           const email = String(clientPayload.email).toLowerCase();
           const results = await Promise.all(
             speedLimitInbounds.map(async ({ id }) => {
@@ -915,7 +921,7 @@ export default function ClientFormModal({
         onCancel={close}
         afterClose={() => {
           setActiveTab('basic');
-          setNewSpeedLimit(0);
+          setNewSpeedLimit(unlimitedSpeedLimit);
         }}
         footer={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -984,16 +990,10 @@ export default function ClientFormModal({
                               ))}
                             </Space>
                           ) : (
-                            <InputNumber
-                              aria-label={t('pages.inbounds.speedLimitRate')}
-                              disabled={speedLimitInbounds.length === 0}
-                              min={0}
-                              max={1000}
-                              step={0.01}
-                              precision={2}
-                              suffix="MB/s"
+                            <SpeedLimitFields
                               value={newSpeedLimit}
-                              onChange={(value) => setNewSpeedLimit(Number(value) || 0)}
+                              onChange={setNewSpeedLimit}
+                              disabled={speedLimitInbounds.length === 0}
                             />
                           )}
                         </Form.Item>

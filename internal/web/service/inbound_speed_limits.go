@@ -12,9 +12,11 @@ import (
 )
 
 type InboundSpeedLimitEntry struct {
-	ClientID int    `json:"clientId"`
-	Email    string `json:"email"`
-	Bytes    int    `json:"bytesPerSecond"`
+	ClientID      int    `json:"clientId"`
+	Email         string `json:"email"`
+	Bytes         int    `json:"bytesPerSecond"`
+	UploadBytes   int    `json:"uploadBytesPerSecond"`
+	DownloadBytes int    `json:"downloadBytesPerSecond"`
 }
 
 func SupportsInboundSpeedLimits(inbound *model.Inbound) bool {
@@ -29,26 +31,32 @@ func SupportsInboundSpeedLimits(inbound *model.Inbound) bool {
 	}
 }
 
+// Earlier rows have NULL directional columns and use the shared bytes value.
+const speedLimitColumns = `COALESCE(l.bytes, 0) AS bytes,
+	COALESCE(l.upload_bytes, l.bytes, 0) AS upload_bytes,
+	COALESCE(l.download_bytes, l.bytes, 0) AS download_bytes`
+
 func (s *InboundService) GetInboundSpeedLimits(id int) ([]InboundSpeedLimitEntry, error) {
 	rows := []InboundSpeedLimitEntry{}
 	err := database.GetDB().Table("client_inbounds ci").
-		Select("c.id AS client_id, c.email, COALESCE(l.bytes, 0) AS bytes").
+		Select("c.id AS client_id, c.email, "+speedLimitColumns).
 		Joins("JOIN clients c ON c.id = ci.client_id").
 		Joins("LEFT JOIN inbound_speed_limits l ON l.inbound_id = ci.inbound_id AND l.client_id = ci.client_id").
 		Where("ci.inbound_id = ?", id).Order("c.email").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	var inboundBytes int
-	if err := database.GetDB().Model(&model.InboundSpeedLimit{}).Select("bytes").
-		Where("inbound_id = ? AND client_id = 0", id).Limit(1).Scan(&inboundBytes).Error; err != nil {
+	var inboundLimit InboundSpeedLimitEntry
+	if err := database.GetDB().Table("inbound_speed_limits l").Select(speedLimitColumns).
+		Where("l.inbound_id = ? AND l.client_id = 0", id).Limit(1).Scan(&inboundLimit).Error; err != nil {
 		return nil, err
 	}
-	return append([]InboundSpeedLimitEntry{{Bytes: inboundBytes}}, rows...), nil
+	return append([]InboundSpeedLimitEntry{inboundLimit}, rows...), nil
 }
 
-func (s *InboundService) SetInboundSpeedLimit(id, clientID, bytes int) error {
-	if clientID < 0 || bytes < 0 || (bytes > 0 && bytes < 10000) || bytes > 1000000000 {
+func (s *InboundService) SetInboundSpeedLimit(id, clientID, upload, download int) error {
+	validRate := func(bytes int) bool { return bytes == 0 || (bytes >= 10000 && bytes <= 1000000000) }
+	if clientID < 0 || !validRate(upload) || !validRate(download) {
 		return errors.New("speed limit must be zero or between 0.01 and 1000 MB/s")
 	}
 	return database.GetDB().Transaction(func(tx *gorm.DB) error {
@@ -58,13 +66,16 @@ func (s *InboundService) SetInboundSpeedLimit(id, clientID, bytes int) error {
 				return err
 			}
 		}
-		row := model.InboundSpeedLimit{InboundID: id, ClientID: clientID, Bytes: bytes}
-		if bytes == 0 {
+		row := model.InboundSpeedLimit{InboundID: id, ClientID: clientID, UploadBytes: &upload, DownloadBytes: &download}
+		if upload == download {
+			row.Bytes = upload
+		}
+		if upload == 0 && download == 0 {
 			return tx.Where("inbound_id = ? AND client_id = ?", id, clientID).Delete(&row).Error
 		}
 		return tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "inbound_id"}, {Name: "client_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"bytes"}),
+			DoUpdates: clause.AssignmentColumns([]string{"bytes", "upload_bytes", "download_bytes"}),
 		}).Create(&row).Error
 	})
 }
@@ -77,7 +88,7 @@ func buildInboundSpeedLimits() (json.RawMessage, error) {
 		Tag      string
 	}
 	err := database.GetDB().Table("inbound_speed_limits l").
-		Select("l.client_id, l.bytes, i.protocol, i.tag, i.node_id, COALESCE(c.email, '') AS email").
+		Select("i.protocol, i.tag, i.node_id, COALESCE(c.email, '') AS email, "+speedLimitColumns).
 		Joins("JOIN inbounds i ON i.id = l.inbound_id").
 		Joins("LEFT JOIN client_inbounds ci ON ci.inbound_id = l.inbound_id AND ci.client_id = l.client_id").
 		Joins("LEFT JOIN clients c ON c.id = ci.client_id").
@@ -85,15 +96,19 @@ func buildInboundSpeedLimits() (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]map[string]int)
+	type directionalLimit struct {
+		Upload   int `json:"upload"`
+		Download int `json:"download"`
+	}
+	result := make(map[string]map[string]directionalLimit)
 	for _, row := range rows {
 		if !SupportsInboundSpeedLimits(&model.Inbound{NodeID: row.NodeID, Protocol: row.Protocol}) {
 			continue
 		}
 		if result[row.Tag] == nil {
-			result[row.Tag] = make(map[string]int)
+			result[row.Tag] = make(map[string]directionalLimit)
 		}
-		result[row.Tag][strings.ToLower(row.Email)] = row.Bytes
+		result[row.Tag][strings.ToLower(row.Email)] = directionalLimit{Upload: row.UploadBytes, Download: row.DownloadBytes}
 	}
 	if len(result) == 0 {
 		return nil, nil

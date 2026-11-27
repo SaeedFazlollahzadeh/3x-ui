@@ -916,7 +916,9 @@ export interface InboundOption {
 export interface InboundSpeedLimitEntry {
   bytesPerSecond: number;
   clientId: number;
+  downloadBytesPerSecond: number;
   email: string;
+  uploadBytesPerSecond: number;
 }
 
 export interface InboundTrafficSummary {

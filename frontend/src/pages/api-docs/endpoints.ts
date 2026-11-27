@@ -422,7 +422,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/inbounds/:id/speedLimits',
         summary:
-          'Set a cap in bytes per second for each direction. Client ID 0 selects the whole inbound. A cap of 0 clears the selected limit.',
+          'Set independent upload and download caps in bytes per second. Client ID 0 selects the whole inbound. A cap of 0 clears that direction.',
         params: [
           { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' },
           {
@@ -432,13 +432,23 @@ export const sections: readonly Section[] = [
             desc: 'Client ID, or 0 for the shared inbound cap.',
           },
           {
-            name: 'bytesPerSecond',
+            name: 'uploadBytesPerSecond',
             in: 'body (json)',
             type: 'number',
-            desc: '0 or 10,000 to 1,000,000,000 bytes per second.',
+            desc: 'Upload cap. Use 0 or 10,000 to 1,000,000,000 bytes per second.',
+          },
+          {
+            name: 'downloadBytesPerSecond',
+            in: 'body (json)',
+            type: 'number',
+            desc: 'Download cap. Use 0 or 10,000 to 1,000,000,000 bytes per second.',
           },
         ],
-        body: JSON.stringify({ clientId: 42, bytesPerSecond: 1000000 }, null, 2),
+        body: JSON.stringify(
+          { clientId: 42, uploadBytesPerSecond: 0, downloadBytesPerSecond: 5000000 },
+          null,
+          2,
+        ),
         responseSchema: 'InboundSpeedLimitEntry',
         responseSchemaArray: true,
       },

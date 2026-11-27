@@ -24,7 +24,7 @@ var panelLimits = map[string]map[string]panelLimit{}
 
 func init() {
 	if len(os.Args) == 2 && os.Args[1] == "--xui-speed-limit-support" {
-		fmt.Println("xui-speed-limits-v1")
+		fmt.Println("xui-speed-limits-v2")
 		os.Exit(0)
 	}
 	path := os.Getenv("XUI_XRAY_SPEED_LIMIT_FILE")
@@ -35,20 +35,27 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	var config map[string]map[string]int
+	var config map[string]map[string]struct {
+		Upload   int `json:"upload"`
+		Download int `json:"download"`
+	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		panic(err)
 	}
 	for tag, entries := range config {
 		limits := make(map[string]panelLimit)
-		for email, bytes := range entries {
-			if bytes > 0 {
-				burst := max(1, bytes/10)
-				limits[email] = panelLimit{rate.NewLimiter(rate.Limit(bytes), burst), rate.NewLimiter(rate.Limit(bytes), burst)}
-			}
+		for email, speeds := range entries {
+			limits[email] = panelLimit{upload: newPanelLimiter(speeds.Upload), download: newPanelLimiter(speeds.Download)}
 		}
 		panelLimits[tag] = limits
 	}
+}
+
+func newPanelLimiter(bytes int) *rate.Limiter {
+	if bytes <= 0 {
+		return nil
+	}
+	return rate.NewLimiter(rate.Limit(bytes), max(1, bytes/10))
 }
 
 func applyPanelSpeedLimits(ctx context.Context, link *transport.Link) {
@@ -62,13 +69,14 @@ func applyPanelSpeedLimits(ctx context.Context, link *transport.Link) {
 	if inbound.User != nil {
 		clientLimit = limits[strings.ToLower(inbound.User.Email)]
 	}
-	if inboundLimit.upload == nil && clientLimit.upload == nil {
-		return
+	if inboundLimit.upload != nil || clientLimit.upload != nil {
+		link.Reader = &panelLimitedReader{Reader: link.Reader, ctx: ctx, inbound: inboundLimit.upload, client: clientLimit.upload}
 	}
-	// Freedom's Linux splice bypasses the dispatcher link writer.
-	inbound.CanSpliceCopy = 3
-	link.Reader = &panelLimitedReader{Reader: link.Reader, ctx: ctx, inbound: inboundLimit.upload, client: clientLimit.upload}
-	link.Writer = &panelLimitedWriter{Writer: link.Writer, ctx: ctx, inbound: inboundLimit.download, client: clientLimit.download}
+	if inboundLimit.download != nil || clientLimit.download != nil {
+		// Freedom's Linux splice bypasses the dispatcher link writer.
+		inbound.CanSpliceCopy = 3
+		link.Writer = &panelLimitedWriter{Writer: link.Writer, ctx: ctx, inbound: inboundLimit.download, client: clientLimit.download}
+	}
 }
 
 func waitPanelBytes(ctx context.Context, bytes int, inbound, client *rate.Limiter) error {

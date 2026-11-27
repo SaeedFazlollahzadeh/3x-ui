@@ -546,19 +546,29 @@ func (a *InboundController) inboundSpeedLimits(c *gin.Context) {
 	if c.Request.Method == "POST" {
 		var input struct {
 			ClientID int  `json:"clientId"`
-			Bytes    *int `json:"bytesPerSecond" binding:"required"`
+			Bytes    *int `json:"bytesPerSecond"`
+			Upload   *int `json:"uploadBytesPerSecond"`
+			Download *int `json:"downloadBytesPerSecond"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			jsonObj(c, nil, err)
 			return
 		}
-		if *input.Bytes > 0 {
+		switch {
+		case input.Upload != nil && input.Download != nil && input.Bytes == nil:
+		case input.Upload == nil && input.Download == nil && input.Bytes != nil:
+			input.Upload, input.Download = input.Bytes, input.Bytes
+		default:
+			jsonObj(c, nil, errors.New("supply both upload and download limits, or a shared legacy limit"))
+			return
+		}
+		if *input.Upload > 0 || *input.Download > 0 {
 			if err := xray.CheckSpeedLimitSupport(c.Request.Context()); err != nil {
 				jsonObj(c, nil, err)
 				return
 			}
 		}
-		if err := a.inboundService.SetInboundSpeedLimit(id, input.ClientID, *input.Bytes); err != nil {
+		if err := a.inboundService.SetInboundSpeedLimit(id, input.ClientID, *input.Upload, *input.Download); err != nil {
 			jsonObj(c, nil, err)
 			return
 		}

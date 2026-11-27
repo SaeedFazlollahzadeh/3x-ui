@@ -1078,7 +1078,9 @@ export const EXAMPLES: Record<string, unknown> = {
   "InboundSpeedLimitEntry": {
     "bytesPerSecond": 0,
     "clientId": 0,
-    "email": ""
+    "downloadBytesPerSecond": 0,
+    "email": "",
+    "uploadBytesPerSecond": 0
   },
   "InboundTrafficSummary": {
     "down": 2097152,

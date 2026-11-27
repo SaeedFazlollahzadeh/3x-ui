@@ -624,21 +624,33 @@ func TestInboundSpeedLimitsResolveByClientMembership(t *testing.T) {
 	if err != nil || len(rows) != 2 || rows[1].Email != email || rows[1].ClientID <= 0 {
 		t.Fatalf("speed limit entries = %+v, error = %v", rows, err)
 	}
-	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 1_000_000); err != nil {
+	legacy := model.InboundSpeedLimit{InboundID: inbound.Id, Bytes: 10_000_000}
+	if err := database.GetDB().Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 0, 5_000_000); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := buildInboundSpeedLimits()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var limits map[string]map[string]int
+	type directions struct {
+		Upload   int
+		Download int
+	}
+	var limits map[string]map[string]directions
 	if err := json.Unmarshal(raw, &limits); err != nil {
 		t.Fatal(err)
 	}
-	if limits[inbound.Tag][email] != 1_000_000 || limits[inbound.Tag][""] != 0 {
+	if limits[inbound.Tag][email] != (directions{Upload: 0, Download: 5_000_000}) ||
+		limits[inbound.Tag][""] != (directions{Upload: 10_000_000, Download: 10_000_000}) {
 		t.Fatalf("unexpected runtime speed limits: %s", raw)
 	}
-	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 0); err != nil {
+	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetInboundSpeedLimit(inbound.Id, 0, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	if raw, err := buildInboundSpeedLimits(); err != nil || len(raw) != 0 {

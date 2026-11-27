@@ -1,4 +1,9 @@
-import { saveSpeedLimit, supportsSpeedLimits } from '@/lib/clients/speed-limits';
+import SpeedLimitFields from '@/components/clients/SpeedLimitFields';
+import {
+  saveSpeedLimit,
+  supportsSpeedLimits,
+  unlimitedSpeedLimit,
+} from '@/lib/clients/speed-limits';
 import InboundSpeedLimits from './InboundSpeedLimits';
 import { NativeSelect } from '@/components/form/NativeSelect';
 import { useEffect, useRef, useState, useId } from 'react';
@@ -264,7 +269,7 @@ export default function InboundFormModal({
   const getV = methods.getValues as unknown as (name?: string) => unknown;
   const control = methods.control;
   const [saving, setSaving] = useState(false);
-  const [newSpeedLimit, setNewSpeedLimit] = useState(0);
+  const [newSpeedLimit, setNewSpeedLimit] = useState(unlimitedSpeedLimit);
   const savedInboundId = useRef<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<RealityScanResult | null>(null);
@@ -663,7 +668,11 @@ export default function InboundFormModal({
             return;
           }
         }
-        if (mode === 'add' && newSpeedLimit > 0 && supportsSpeedLimits(protocol, wNodeId)) {
+        if (
+          mode === 'add' &&
+          (newSpeedLimit.upload > 0 || newSpeedLimit.download > 0) &&
+          supportsSpeedLimits(protocol, wNodeId)
+        ) {
           const limit = masterId ? await saveSpeedLimit(masterId, 0, newSpeedLimit) : null;
           if (!limit?.success)
             messageApi.error(limit?.msg || t('pages.inbounds.speedLimitAfterCreateError'));
@@ -845,16 +854,7 @@ export default function InboundFormModal({
           label={t('pages.inbounds.speedLimits')}
           tooltip={t('pages.inbounds.speedLimitHelp')}
         >
-          <InputNumber
-            aria-label={t('pages.inbounds.speedLimitRate')}
-            min={0}
-            max={1000}
-            step={0.01}
-            precision={2}
-            suffix="MB/s"
-            value={newSpeedLimit}
-            onChange={(value) => setNewSpeedLimit(Number(value) || 0)}
-          />
+          <SpeedLimitFields value={newSpeedLimit} onChange={setNewSpeedLimit} />
         </Form.Item>
       )}
 
@@ -1296,7 +1296,7 @@ export default function InboundFormModal({
         onOk={submit}
         onCancel={onClose}
         destroyOnHidden
-        afterClose={() => setNewSpeedLimit(0)}
+        afterClose={() => setNewSpeedLimit(unlimitedSpeedLimit)}
         modalRender={(content) => (
           <div role="presentation" onKeyDown={loopInboundFocus}>
             {content}

@@ -1,0 +1,20 @@
+.speed-limit-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.speed-limit-fields label {
+  display: block;
+  margin-block-end: 6px;
+}
+
+.speed-limit-fields .speed-limit-input {
+  width: 100%;
+}
+
+.speed-limit-fields .speed-limit-input:focus-within {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: 2px;
+}

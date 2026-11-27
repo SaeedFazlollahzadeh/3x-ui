@@ -4060,14 +4060,22 @@
           "clientId": {
             "type": "integer"
           },
+          "downloadBytesPerSecond": {
+            "type": "integer"
+          },
           "email": {
             "type": "string"
+          },
+          "uploadBytesPerSecond": {
+            "type": "integer"
           }
         },
         "required": [
           "bytesPerSecond",
           "clientId",
-          "email"
+          "downloadBytesPerSecond",
+          "email",
+          "uploadBytesPerSecond"
         ],
         "type": "object"
       },
@@ -7267,7 +7275,9 @@
                     {
                       "bytesPerSecond": 0,
                       "clientId": 0,
-                      "email": ""
+                      "downloadBytesPerSecond": 0,
+                      "email": "",
+                      "uploadBytesPerSecond": 0
                     }
                   ]
                 }
@@ -7280,7 +7290,7 @@
         "tags": [
           "Inbounds"
         ],
-        "summary": "Set a cap in bytes per second for each direction. Client ID 0 selects the whole inbound. A cap of 0 clears the selected limit.",
+        "summary": "Set independent upload and download caps in bytes per second. Client ID 0 selects the whole inbound. A cap of 0 clears that direction.",
         "operationId": "post_panel_api_inbounds_id_speedLimits",
         "parameters": [
           {
@@ -7304,19 +7314,25 @@
                     "type": "integer",
                     "description": "Client ID, or 0 for the shared inbound cap."
                   },
-                  "bytesPerSecond": {
+                  "uploadBytesPerSecond": {
                     "type": "integer",
-                    "description": "0 or 10,000 to 1,000,000,000 bytes per second."
+                    "description": "Upload cap. Use 0 or 10,000 to 1,000,000,000 bytes per second."
+                  },
+                  "downloadBytesPerSecond": {
+                    "type": "integer",
+                    "description": "Download cap. Use 0 or 10,000 to 1,000,000,000 bytes per second."
                   }
                 },
                 "required": [
                   "clientId",
-                  "bytesPerSecond"
+                  "uploadBytesPerSecond",
+                  "downloadBytesPerSecond"
                 ]
               },
               "example": {
                 "clientId": 42,
-                "bytesPerSecond": 1000000
+                "uploadBytesPerSecond": 0,
+                "downloadBytesPerSecond": 5000000
               }
             }
           }
@@ -7349,7 +7365,9 @@
                     {
                       "bytesPerSecond": 0,
                       "clientId": 0,
-                      "email": ""
+                      "downloadBytesPerSecond": 0,
+                      "email": "",
+                      "uploadBytesPerSecond": 0
                     }
                   ]
                 }
