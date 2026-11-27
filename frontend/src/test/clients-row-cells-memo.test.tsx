@@ -93,6 +93,7 @@ describe('clients table row cells', () => {
   it('keeps the row actions wired to the right client across re-renders', async () => {
     const onShowQr = vi.fn();
     const onEdit = vi.fn();
+    const onShowLogs = vi.fn();
     const noop = vi.fn();
     let bump: () => void = () => {};
 
@@ -108,6 +109,7 @@ describe('clients table row cells', () => {
               onResetTraffic={noop}
               onEdit={onEdit}
               onDelete={noop}
+              onShowLogs={onShowLogs}
             />
           );
         }}
@@ -118,15 +120,18 @@ describe('clients table row cells', () => {
       for (let i = 0; i < 3; i++) bump();
     });
 
-    // Queried by position rather than label: the suite loads the real en-US
-    // bundle, so the aria-labels are translated strings, not keys. Order is
-    // QR, info, reset traffic, edit, delete.
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(5);
-    await userEvent.click(buttons[0]);
-    await userEvent.click(buttons[3]);
+    await userEvent.click(screen.getByRole('button', { name: /qr code/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Logs' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Access logs' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Logs' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Subscription login logs' }));
 
     expect(onShowQr).toHaveBeenCalledExactlyOnceWith('alice@x');
     expect(onEdit).toHaveBeenCalledExactlyOnceWith('alice@x');
+    expect(onShowLogs.mock.calls).toEqual([
+      ['alice@x', 'access'],
+      ['alice@x', 'subscription'],
+    ]);
   });
 });

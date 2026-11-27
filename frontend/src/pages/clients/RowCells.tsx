@@ -1,14 +1,16 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Popover, Space, Tag, Tooltip } from 'antd';
+import { Button, Dropdown, Popover, Space, Tag, Tooltip } from 'antd';
 import {
   DeleteOutlined,
   EditOutlined,
+  FileTextOutlined,
   InfoCircleOutlined,
   QrcodeOutlined,
   RetweetOutlined,
 } from '@ant-design/icons';
 
+import type { ClientLogView } from '@/components/clients/ClientUsageHistoryModal';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import type { InboundOption } from '@/hooks/useClients';
 
@@ -21,9 +23,10 @@ interface ClientRowActionsProps {
   onResetTraffic: (email: string) => void;
   onEdit: (email: string) => void;
   onDelete: (email: string) => void;
+  onShowLogs: (email: string, view: ClientLogView) => void;
 }
 
-// Five Tooltip-wrapped buttons per row, none of which depend on traffic. Left
+// Row actions do not depend on traffic. Left
 // inline they re-ran rc-tooltip's alignment machinery for every visible row on
 // every traffic push — 125 Tooltips on a 25-row page, five seconds apart.
 // Keyed on the email rather than the row object, because a push replaces the row
@@ -35,6 +38,7 @@ export const ClientRowActions = memo(function ClientRowActions({
   onResetTraffic,
   onEdit,
   onDelete,
+  onShowLogs,
 }: ClientRowActionsProps) {
   const { t } = useTranslation();
   return (
@@ -79,6 +83,27 @@ export const ClientRowActions = memo(function ClientRowActions({
           onClick={() => onEdit(email)}
         />
       </Tooltip>
+      <Dropdown
+        trigger={['click']}
+        menu={{
+          items: [
+            {
+              key: 'access',
+              label: t('pages.clients.clientAccessLogs'),
+              onClick: () => onShowLogs(email, 'access'),
+            },
+            {
+              key: 'subscription',
+              label: t('pages.clients.subscriptionLoginLogs'),
+              onClick: () => onShowLogs(email, 'subscription'),
+            },
+          ],
+        }}
+      >
+        <Button size="small" type="text" icon={<FileTextOutlined aria-hidden />}>
+          {t('pages.clients.clientLogs')}
+        </Button>
+      </Dropdown>
       <Tooltip title={t('delete')}>
         <Button
           size="small"

@@ -68,6 +68,7 @@ import type {
   ExternalLink,
   ExternalLinkInput,
 } from '@/hooks/useClients';
+import type { ClientLogView } from '@/components/clients/ClientUsageHistoryModal';
 import ClientTrafficCell from '@/components/clients/ClientTrafficCell';
 import ClientSpeedTag, { isActiveSpeed } from '@/components/clients/ClientSpeedTag';
 import ClientCardComment from '@/components/clients/ClientCardComment';
@@ -81,6 +82,7 @@ import {
   SPEED_TAG_STYLE,
 } from '@/components/utility/speedTagStyle';
 const ClientFormModal = lazy(() => import('./ClientFormModal'));
+const ClientUsageHistoryModal = lazy(() => import('@/components/clients/ClientUsageHistoryModal'));
 const ClientInfoModal = lazy(() => import('./ClientInfoModal'));
 const ClientQrModal = lazy(() => import('./ClientQrModal'));
 const ClientBulkAddModal = lazy(() => import('./ClientBulkAddModal'));
@@ -402,6 +404,11 @@ export default function ClientsPage() {
   const [editingExternalLinks, setEditingExternalLinks] = useState<ExternalLink[]>([]);
   const [editingTunnelAllowedIPs, setEditingTunnelAllowedIPs] = useState<Record<number, string>>(
     {},
+  );
+  const [clientLogs, setClientLogs] = useState<{ email: string; view: ClientLogView } | null>(null);
+  const onShowLogs = useCallback(
+    (email: string, view: ClientLogView) => setClientLogs({ email, view }),
+    [],
   );
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoClient, setInfoClient] = useState<ClientRecord | null>(null);
@@ -1062,7 +1069,7 @@ export default function ClientsPage() {
       {
         title: t('pages.clients.actions'),
         key: 'actions',
-        width: 200,
+        width: 260,
         render: (_v, record) => (
           <ClientRowActions
             email={record.email}
@@ -1071,6 +1078,7 @@ export default function ClientsPage() {
             onResetTraffic={onResetTraffic}
             onEdit={onEdit}
             onDelete={onDelete}
+            onShowLogs={onShowLogs}
           />
         ),
       },
@@ -1876,6 +1884,16 @@ export default function ClientsPage() {
                                               onClick: () => onEdit(row.email),
                                             },
                                             {
+                                              key: 'access-logs',
+                                              label: t('pages.clients.clientAccessLogs'),
+                                              onClick: () => onShowLogs(row.email, 'access'),
+                                            },
+                                            {
+                                              key: 'login-logs',
+                                              label: t('pages.clients.subscriptionLoginLogs'),
+                                              onClick: () => onShowLogs(row.email, 'subscription'),
+                                            },
+                                            {
                                               key: 'delete',
                                               danger: true,
                                               label: (
@@ -1944,6 +1962,14 @@ export default function ClientsPage() {
             save={onSave}
             resetTraffic={resetTraffic}
             onOpenChange={setFormOpen}
+          />
+        </LazyMount>
+        <LazyMount when={!!clientLogs}>
+          <ClientUsageHistoryModal
+            open={!!clientLogs}
+            email={clientLogs?.email}
+            logView={clientLogs?.view}
+            onClose={() => setClientLogs(null)}
           />
         </LazyMount>
         <LazyMount when={infoOpen}>

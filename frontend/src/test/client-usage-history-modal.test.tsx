@@ -2,7 +2,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import ClientUsageHistoryModal from '@/components/clients/ClientUsageHistoryModal';
+import ClientUsageHistoryModal, {
+  type ClientLogView,
+} from '@/components/clients/ClientUsageHistoryModal';
 import { setDatepicker } from '@/hooks/useDatepicker';
 import { HttpUtil } from '@/utils';
 
@@ -38,11 +40,16 @@ const history = {
   ],
 };
 
-function openModal() {
+function openModal(logView?: ClientLogView) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ClientUsageHistoryModal open email="client@example.com" onClose={() => {}} />
+      <ClientUsageHistoryModal
+        open
+        email="client@example.com"
+        logView={logView}
+        onClose={() => {}}
+      />
     </QueryClientProvider>,
   );
 }
@@ -125,5 +132,35 @@ describe('ClientUsageHistoryModal', () => {
       expect(screen.getByText('No usage or change history yet.')).toBeTruthy();
     });
     expect(screen.queryByText('Usage by node')).toBeNull();
+  });
+});
+
+describe('direct client logs', () => {
+  it('explains how to collect destinations when the access log is empty', async () => {
+    vi.spyOn(HttpUtil, 'get').mockResolvedValue({
+      success: true,
+      msg: '',
+      obj: { ...history, accessLogs: [] },
+    });
+    openModal('access');
+    expect(await screen.findByText(/Enable Access Log under Xray Configs/)).toBeTruthy();
+    expect(screen.queryByText('Lifetime traffic')).toBeNull();
+  });
+
+  it('shows the device and IP for a successful subscription download', async () => {
+    vi.spyOn(HttpUtil, 'get').mockResolvedValue({
+      success: true,
+      msg: '',
+      obj: {
+        ...history,
+        subscriptionFetches: [
+          { id: 1, at: 1735689600000, ip: '192.0.2.20', userAgent: 'Example VPN' },
+        ],
+      },
+    });
+    openModal('subscription');
+    expect(await screen.findByText('Example VPN')).toBeTruthy();
+    expect(screen.getByText('192.0.2.20')).toBeTruthy();
+    expect(screen.getByText(/Subscription login logs/)).toBeTruthy();
   });
 });

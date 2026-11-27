@@ -6,10 +6,13 @@ import { useClientUsageHistoryQuery } from '@/api/queries/useClientUsageHistoryQ
 import { useDatepicker } from '@/hooks/useDatepicker';
 import { IntlUtil, SizeFormatter } from '@/utils';
 
+export type ClientLogView = 'access' | 'subscription';
+
 interface ClientUsageHistoryModalProps {
   open: boolean;
   email?: string;
   zIndex?: number;
+  logView?: ClientLogView;
   onClose: () => void;
 }
 
@@ -57,6 +60,7 @@ export default function ClientUsageHistoryModal({
   open,
   email,
   zIndex,
+  logView,
   onClose,
 }: ClientUsageHistoryModalProps) {
   const { t } = useTranslation();
@@ -173,10 +177,66 @@ export default function ClientUsageHistoryModal({
       !!history.subscriptionFetches?.length ||
       !!history.accessLogs?.length);
 
+  const subscriptionLog = (
+    <section>
+      {!logView && (
+        <Typography.Title level={5}>{t('pages.clients.subscriptionFetches')}</Typography.Title>
+      )}
+      <Table
+        rowKey="id"
+        size="small"
+        locale={{ emptyText: t('pages.clients.noSubscriptionLoginLogs') }}
+        scroll={{ x: 480 }}
+        pagination={{ pageSize: 10, hideOnSinglePage: true }}
+        dataSource={history?.subscriptionFetches}
+        columns={[
+          {
+            title: t('pages.clients.activityTime'),
+            dataIndex: 'at',
+            render: (at: number) => new Date(at).toLocaleString(),
+          },
+          { title: t('pages.clients.reportedDevice'), dataIndex: 'userAgent' },
+          { title: 'IP', dataIndex: 'ip' },
+        ]}
+      />
+    </section>
+  );
+  const accessLog = (
+    <section>
+      {!logView && (
+        <Typography.Title level={5}>{t('pages.clients.recentXrayDestinations')}</Typography.Title>
+      )}
+      <Table
+        rowKey={(_, index) => String(index)}
+        size="small"
+        locale={{ emptyText: t('pages.clients.noClientAccessLogs') }}
+        scroll={{ x: 480 }}
+        pagination={{ pageSize: 10, hideOnSinglePage: true }}
+        dataSource={history?.accessLogs}
+        columns={[
+          {
+            title: t('pages.clients.activityTime'),
+            dataIndex: 'DateTime',
+            render: (at: string) => new Date(at).toLocaleString(),
+          },
+          { title: t('pages.clients.activityInbound'), dataIndex: 'Inbound' },
+          { title: t('pages.clients.activityDestination'), dataIndex: 'ToAddress' },
+        ]}
+      />
+    </section>
+  );
+  const title = t(
+    logView === 'access'
+      ? 'pages.clients.clientAccessLogs'
+      : logView === 'subscription'
+        ? 'pages.clients.subscriptionLoginLogs'
+        : 'pages.clients.usageHistory',
+  );
+
   return (
     <Modal
       open={open}
-      title={`${t('pages.clients.usageHistory')}${email ? ` — ${email}` : ''}`}
+      title={`${title}${email ? ` — ${email}` : ''}`}
       width={720}
       zIndex={zIndex}
       onCancel={onClose}
@@ -189,6 +249,15 @@ export default function ClientUsageHistoryModal({
         </div>
       ) : isError ? (
         <Typography.Text type="secondary">{t('pages.clients.historyError')}</Typography.Text>
+      ) : logView === 'access' ? (
+        accessLog
+      ) : logView === 'subscription' ? (
+        <>
+          <Typography.Paragraph type="secondary">
+            {t('pages.clients.subscriptionLoginLogsHelp')}
+          </Typography.Paragraph>
+          {subscriptionLog}
+        </>
       ) : !hasContent ? (
         <Typography.Text type="secondary">{t('pages.clients.noUsageHistory')}</Typography.Text>
       ) : (
@@ -220,50 +289,8 @@ export default function ClientUsageHistoryModal({
             </table>
           </section>
           <DailyTrafficChart days={history!.dailyTraffic ?? []} />
-          {!!history!.subscriptionFetches?.length && (
-            <section>
-              <Typography.Title level={5}>
-                {t('pages.clients.subscriptionFetches')}
-              </Typography.Title>
-              <Table
-                rowKey="id"
-                size="small"
-                pagination={{ pageSize: 10, hideOnSinglePage: true }}
-                dataSource={history!.subscriptionFetches}
-                columns={[
-                  {
-                    title: t('pages.clients.activityTime'),
-                    dataIndex: 'at',
-                    render: (at: number) => new Date(at).toLocaleString(),
-                  },
-                  { title: t('pages.clients.reportedDevice'), dataIndex: 'userAgent' },
-                  { title: 'IP', dataIndex: 'ip' },
-                ]}
-              />
-            </section>
-          )}
-          {!!history!.accessLogs?.length && (
-            <section>
-              <Typography.Title level={5}>
-                {t('pages.clients.recentXrayDestinations')}
-              </Typography.Title>
-              <Table
-                rowKey={(_, index) => String(index)}
-                size="small"
-                pagination={{ pageSize: 10, hideOnSinglePage: true }}
-                dataSource={history!.accessLogs}
-                columns={[
-                  {
-                    title: t('pages.clients.activityTime'),
-                    dataIndex: 'DateTime',
-                    render: (at: string) => new Date(at).toLocaleString(),
-                  },
-                  { title: t('pages.clients.activityInbound'), dataIndex: 'Inbound' },
-                  { title: t('pages.clients.activityDestination'), dataIndex: 'ToAddress' },
-                ]}
-              />
-            </section>
-          )}
+          {!!history!.subscriptionFetches?.length && subscriptionLog}
+          {!!history!.accessLogs?.length && accessLog}
           {history!.nodes.length > 0 && (
             <section>
               <Typography.Title level={5} style={{ marginBottom: 8 }}>
