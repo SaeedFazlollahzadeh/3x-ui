@@ -76,7 +76,11 @@ else
     echo "Failed to check the system OS, please contact the author!" >&2
     exit 1
 fi
-echo "The OS release is: $release"
+if [[ "${1:-}" == "provision-postgres" ]]; then
+    echo "The OS release is: $release" >&2
+else
+    echo "The OS release is: $release"
+fi
 
 os_version=""
 os_version=$(grep "^VERSION_ID" /etc/os-release | cut -d '=' -f2 | tr -d '"' | tr -d '.')
@@ -2993,10 +2997,18 @@ purge_postgresql() {
 # scoped to the panel database; first match wins, and md5 also accepts
 # scram-sha-256-stored verifiers, so this works on every supported distro.
 # Mirrors pg_ensure_hba_password_auth() from install.sh.
+pg_admin_psql() {
+    if command -v runuser > /dev/null 2>&1; then
+        runuser -u postgres -- psql "$@"
+    else
+        sudo -u postgres psql "$@"
+    fi
+}
+
 pg_ensure_hba_password_auth() {
     local pg_db="$1"
     local hba_file
-    hba_file=$(sudo -u postgres psql -tAc 'SHOW hba_file' 2> /dev/null | tr -d '[:space:]')
+    hba_file=$(pg_admin_psql -tAc 'SHOW hba_file' 2> /dev/null | tr -d '[:space:]')
     [[ -n "${hba_file}" && -f "${hba_file}" ]] || return 0
     grep -Eq "^host[[:space:]]+${pg_db}[[:space:]]" "${hba_file}" && return 0
     local tmp
@@ -3015,7 +3027,7 @@ pg_ensure_hba_password_auth() {
         return 1
     }
     rm -f "${tmp}"
-    sudo -u postgres psql -tAc 'SELECT pg_reload_conf()' > /dev/null 2>&1 || true
+    pg_admin_psql -tAc 'SELECT pg_reload_conf()' > /dev/null 2>&1 || true
 }
 
 # New installs get this PostgreSQL major from the official PGDG repository; distros or
@@ -3078,8 +3090,12 @@ pg_el_install_pgdg_server() {
 # panel can be set up without re-running the remote install script.
 pg_install_local() {
     local pg_user pg_pass pg_db pg_host pg_port
-    pg_pass=$(gen_random_string 24)
-    pg_db="xui"
+    if [[ $# -gt 0 ]]; then
+        pg_pass=$(openssl rand -hex 24) || return 1
+    else
+        pg_pass=$(gen_random_string 24)
+    fi
+    pg_db="${1:-xui}"
     pg_host="127.0.0.1"
     pg_port="5432"
 
@@ -3087,7 +3103,7 @@ pg_install_local() {
     case "${release}" in
         ubuntu | debian | armbian)
             apt-get update >&2 || return 1
-            if pg_has_debian_cluster || ! pg_apt_install_pgdg_server; then
+            if [[ $# -gt 0 ]] || pg_has_debian_cluster || ! pg_apt_install_pgdg_server; then
                 apt-get install -y -q postgresql >&2 || return 1
             fi
             ;;
@@ -3138,29 +3154,41 @@ pg_install_local() {
 
     local i
     for i in 1 2 3 4 5; do
-        sudo -u postgres psql -tAc 'SELECT 1' > /dev/null 2>&1 && break
+        pg_admin_psql -tAc 'SELECT 1' > /dev/null 2>&1 && break
         sleep 1
     done
 
     local existing_owner=""
-    existing_owner=$(sudo -u postgres psql -tAc \
+    existing_owner=$(pg_admin_psql -tAc \
         "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname='${pg_db}'" 2> /dev/null \
         | tr -d '[:space:]')
+    if [[ $# -gt 0 && -n "$existing_owner" ]]; then
+        LOGE "The generated PostgreSQL database already exists. Retry provisioning." >&2
+        return 1
+    fi
+    if [[ $# -gt 0 ]]; then
+        pg_user="$pg_db"
+        pg_admin_psql -v ON_ERROR_STOP=1 -c "CREATE USER \"$pg_user\" WITH PASSWORD '$pg_pass';" >&2 || return 1
+        pg_admin_psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$pg_db\" OWNER \"$pg_user\" TEMPLATE template0 ENCODING 'UTF8';" >&2 || return 1
+        pg_ensure_hba_password_auth "$pg_db" || return 1
+        printf 'postgres://%s:%s@%s:%s/%s?sslmode=disable\n' "$pg_user" "$pg_pass" "$pg_host" "$pg_port" "$pg_db"
+        return 0
+    fi
     if [[ -n "${existing_owner}" && "${existing_owner}" != "postgres" ]]; then
         pg_user="${existing_owner}"
     else
         pg_user=$(gen_random_string 8)
     fi
 
-    sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${pg_user}'" 2> /dev/null \
+    pg_admin_psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${pg_user}'" 2> /dev/null \
         | grep -q 1 \
-        || sudo -u postgres psql -c "CREATE USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+        || pg_admin_psql -c "CREATE USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
 
-    sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${pg_db}'" 2> /dev/null \
+    pg_admin_psql -tAc "SELECT 1 FROM pg_database WHERE datname='${pg_db}'" 2> /dev/null \
         | grep -q 1 \
-        || sudo -u postgres psql -c "CREATE DATABASE \"${pg_db}\" OWNER \"${pg_user}\";" >&2 || return 1
+        || pg_admin_psql -c "CREATE DATABASE \"${pg_db}\" OWNER \"${pg_user}\";" >&2 || return 1
 
-    sudo -u postgres psql -c "ALTER USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
+    pg_admin_psql -c "ALTER USER \"${pg_user}\" WITH PASSWORD '${pg_pass}';" >&2 || return 1
 
     pg_ensure_hba_password_auth "${pg_db}" \
         || echo -e "${yellow}Warning: could not update pg_hba.conf; PostgreSQL may reject the panel's TCP login (ident auth).${plain}" >&2
@@ -3170,6 +3198,14 @@ pg_install_local() {
 
     echo "postgres://${pg_user}:${pg_pass_enc}@${pg_host}:${pg_port}/${pg_db}?sslmode=disable"
     return 0
+}
+
+# Provision an isolated migration destination without changing an existing panel database.
+provision_postgres() {
+    local suffix
+    suffix=$(openssl rand -hex 8) || return 1
+    [[ "$suffix" =~ ^[0-9a-f]{16}$ ]] || return 1
+    pg_install_local "xui_$suffix"
 }
 
 # Installs the PostgreSQL client tools (pg_dump/pg_restore) used by in-panel backup.
@@ -3786,6 +3822,9 @@ if [[ $# -gt 0 ]]; then
             ;;
         "migrateDB")
             migrate_db "$2" "$3"
+            ;;
+        "provision-postgres")
+            provision_postgres
             ;;
         "pgclient")
             pg_upgrade_client "$2"

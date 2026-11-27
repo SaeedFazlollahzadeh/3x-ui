@@ -21,6 +21,8 @@ The default bundle directory is saeedxui next to this script. Its layout is:
   usr/local/x-ui/           panel binary, service units, and bin/ assets
 
 Installation uses a complete local bundle or builds missing release files.
+It provisions local PostgreSQL and migrates existing SQLite data on first
+install with this script. The original SQLite database remains on disk.
 On source builds, missing system packages are installed with the Linux package
 manager (using sudo when needed). If Go is missing or too old, the script
 installs docker.io on APT-based systems when Docker is missing. It pulls
@@ -260,7 +262,11 @@ install_executable() {
 install -d "$dest/bin" /var/log/x-ui
 install -d -m 0700 /etc/x-ui
 if [[ -d "$bundle/etc/x-ui" ]]; then
-    (umask 077; cp -Rn -- "$bundle/etc/x-ui/." /etc/x-ui/)
+    copy_mode=-n
+    if cp --update=none --version >/dev/null 2>&1; then
+        copy_mode=--update=none
+    fi
+    (umask 077; cp -R "$copy_mode" -- "$bundle/etc/x-ui/." /etc/x-ui/)
 fi
 # Keep an existing config and any geo/sidecar files omitted by the bundle.
 if [[ -f "$app/bin/config.json" && ! -e "$dest/bin/config.json" ]]; then
@@ -283,5 +289,89 @@ done
 install -m 0644 "$app/$unit" /etc/systemd/system/x-ui.service
 systemctl daemon-reload
 systemctl enable x-ui.service
-systemctl restart x-ui.service
+configure_postgres() (
+    local env_file db_type db_folder db_source dsn work
+    local was_active=0
+    case "$unit" in
+        x-ui.service.arch) env_file=/etc/conf.d/x-ui ;;
+        x-ui.service.rhel) env_file=/etc/sysconfig/x-ui ;;
+        *) env_file=/etc/default/x-ui ;;
+    esac
+
+    read_db_setting() {
+        [[ -r "$env_file" ]] || return 0
+        sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$env_file" |
+            tail -n 1 | sed -E "s/^[\"']//; s/[\"'][[:space:]]*$//; s/[[:space:]]*$//"
+    }
+    db_type="$(read_db_setting XUI_DB_TYPE)"
+    case "$(printf '%s' "$db_type" | tr '[:upper:]' '[:lower:]')" in
+        postgres|postgresql|pg)
+            systemctl restart x-ui.service
+            return
+            ;;
+    esac
+    db_folder="$(read_db_setting XUI_DB_FOLDER)"
+    db_source="${db_folder:-/etc/x-ui}/x-ui.db"
+    if [[ "$db_source" != /* ]]; then
+        db_source="$dest/$db_source"
+    fi
+
+    echo "Provisioning a local PostgreSQL database for x-ui."
+    dsn="$(bash "$repo_dir/x-ui.sh" provision-postgres)" ||
+        fail "Could not provision PostgreSQL."
+    [[ "$dsn" == postgres://* && "$dsn" != *$'\n'* ]] ||
+        fail "PostgreSQL setup did not return a connection string."
+
+    install -d "$(dirname -- "$env_file")"
+    work="$(mktemp -d "$(dirname -- "$env_file")/.x-ui-db.XXXXXX")"
+    trap 'rm -rf -- "$work"' EXIT
+    if [[ -e "$env_file" ]]; then
+        cp -p -- "$env_file" "$work/previous"
+        sed -E '/^[[:space:]]*XUI_DB_(TYPE|DSN)[[:space:]]*=/d' "$env_file" > "$work/env"
+    fi
+    (
+        umask 077
+        printf 'XUI_DB_TYPE=postgres\nXUI_DB_DSN=%s\n' "$dsn" >> "$work/env"
+    )
+    chmod 0600 "$work/env"
+
+    if systemctl is-active --quiet x-ui.service; then
+        was_active=1
+        systemctl stop x-ui.service
+    fi
+
+    restore_previous_service() {
+        if (( was_active )); then
+            systemctl start x-ui.service || true
+        fi
+    }
+
+    if [[ -f "$db_source" ]]; then
+        echo "Migrating $db_source into PostgreSQL."
+        if ! "$dest/x-ui" migrate-db --src "$db_source" --dsn "$dsn"; then
+            restore_previous_service
+            fail "Migration failed. The original SQLite database is still in place."
+        fi
+    elif ! XUI_DB_TYPE=postgres XUI_DB_DSN="$dsn" "$dest/x-ui" migrate; then
+        restore_previous_service
+        fail "Could not initialize the PostgreSQL schema."
+    fi
+
+    if ! mv -f -- "$work/env" "$env_file"; then
+        restore_previous_service
+        fail "Could not update $env_file."
+    fi
+    if ! systemctl restart x-ui.service || ! systemctl is-active --quiet x-ui.service; then
+        systemctl stop x-ui.service || true
+        if [[ -f "$work/previous" ]]; then
+            mv -f -- "$work/previous" "$env_file"
+        else
+            rm -- "$env_file"
+        fi
+        restore_previous_service
+        fail "x-ui could not start with PostgreSQL. The previous database settings were restored."
+    fi
+)
+
+configure_postgres
 systemctl is-active x-ui.service
