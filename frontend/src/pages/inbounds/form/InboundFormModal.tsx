@@ -1,3 +1,4 @@
+import { saveSpeedLimit, supportsSpeedLimits } from '@/lib/clients/speed-limits';
 import InboundSpeedLimits from './InboundSpeedLimits';
 import { NativeSelect } from '@/components/form/NativeSelect';
 import { useEffect, useRef, useState, useId } from 'react';
@@ -263,6 +264,7 @@ export default function InboundFormModal({
   const getV = methods.getValues as unknown as (name?: string) => unknown;
   const control = methods.control;
   const [saving, setSaving] = useState(false);
+  const [newSpeedLimit, setNewSpeedLimit] = useState(0);
   const savedInboundId = useRef<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<RealityScanResult | null>(null);
@@ -661,6 +663,11 @@ export default function InboundFormModal({
             return;
           }
         }
+        if (mode === 'add' && newSpeedLimit > 0 && supportsSpeedLimits(protocol, wNodeId)) {
+          const limit = masterId ? await saveSpeedLimit(masterId, 0, newSpeedLimit) : null;
+          if (!limit?.success)
+            messageApi.error(limit?.msg || t('pages.inbounds.speedLimitAfterCreateError'));
+        }
         const watch = realityWatchDraft.current;
         if (
           mode === 'add' &&
@@ -830,12 +837,26 @@ export default function InboundFormModal({
         </span>
       </Form.Item>
 
-      {mode === 'edit' &&
-        dbInbound &&
-        !dbInbound.nodeId &&
-        ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria', 'masque'].includes(protocol) && (
-          <InboundSpeedLimits id={dbInbound.id} />
-        )}
+      {mode === 'edit' && dbInbound && supportsSpeedLimits(protocol, dbInbound.nodeId) && (
+        <InboundSpeedLimits key={dbInbound.id} id={dbInbound.id} />
+      )}
+      {mode === 'add' && supportsSpeedLimits(protocol, wNodeId) && (
+        <Form.Item
+          label={t('pages.inbounds.speedLimits')}
+          tooltip={t('pages.inbounds.speedLimitHelp')}
+        >
+          <InputNumber
+            aria-label={t('pages.inbounds.speedLimitRate')}
+            min={0}
+            max={1000}
+            step={0.01}
+            precision={2}
+            suffix="MB/s"
+            value={newSpeedLimit}
+            onChange={(value) => setNewSpeedLimit(Number(value) || 0)}
+          />
+        </Form.Item>
+      )}
 
       <FormField name="trafficReset" label={t('pages.inbounds.periodicTrafficResetTitle')}>
         <NativeSelect
@@ -1275,6 +1296,7 @@ export default function InboundFormModal({
         onOk={submit}
         onCancel={onClose}
         destroyOnHidden
+        afterClose={() => setNewSpeedLimit(0)}
         modalRender={(content) => (
           <div role="presentation" onKeyDown={loopInboundFocus}>
             {content}

@@ -1,6 +1,7 @@
 import { describe, it, expect, onTestFinished, vi } from 'vitest';
 import { screen, act, render, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 
+import InboundSpeedLimits from '@/pages/inbounds/form/InboundSpeedLimits';
 import InboundFormModal from '@/pages/inbounds/form/InboundFormModal';
 import { DBInbound } from '@/models/dbinbound';
 import { ThemeProvider } from '@/hooks/useTheme';
@@ -740,5 +741,46 @@ describe('VLESS fallback safety', () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue('8080')).toBeTruthy();
+  });
+});
+
+describe('speed limit controls', () => {
+  it('shows an initial speed limit when adding a local inbound', () => {
+    renderModal();
+    expect(screen.getByRole('spinbutton', { name: 'Speed in MB/s' })).not.toBeNull();
+  });
+
+  it('saves a client rate as JSON with the matching client id', async () => {
+    const get = vi.spyOn(HttpUtil, 'get').mockResolvedValueOnce({
+      success: true,
+      msg: '',
+      obj: [
+        { clientId: 0, email: '', bytesPerSecond: 10_000_000 },
+        { clientId: 9, email: 'alice', bytesPerSecond: 1_000_000 },
+      ],
+    });
+    const post = vi.spyOn(HttpUtil, 'post').mockResolvedValueOnce({
+      success: true,
+      msg: '',
+      obj: [],
+    });
+    onTestFinished(() => {
+      get.mockRestore();
+      post.mockRestore();
+    });
+
+    renderWithProviders(<InboundSpeedLimits id={42} clientEmail="alice" label="VLESS-443" />);
+    fireEvent.click(screen.getByRole('button', { name: 'VLESS-443' }));
+    const dialog = await screen.findByRole('dialog', { name: /Speed limits/ });
+    const rate = within(dialog).getByRole('spinbutton', { name: 'Speed in MB/s' });
+    await waitFor(() => expect(rate.getAttribute('aria-valuenow')).toBe('1'));
+    fireEvent.click(within(dialog).getByText('OK'));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/panel/api/inbounds/42/speedLimits',
+        { clientId: 9, bytesPerSecond: 1_000_000 },
+        { silent: true, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
   });
 });

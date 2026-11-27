@@ -1,3 +1,5 @@
+import InboundSpeedLimits from '@/pages/inbounds/form/InboundSpeedLimits';
+import { getSpeedLimits, saveSpeedLimit, supportsSpeedLimits } from '@/lib/clients/speed-limits';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -254,10 +256,16 @@ export default function ClientFormModal({
   const uid = useId();
   const [messageApi, messageContextHolder] = message.useMessage();
   const isEdit = mode === 'edit';
+  const [newSpeedLimit, setNewSpeedLimit] = useState(0);
   const minWireguardDeviceLimit = Math.max(1, (client?.wireguardDevices?.length ?? 0) + 1);
 
   const methods = useForm<Values>({ defaultValues: EMPTY });
   const inboundIds = useWatch({ control: methods.control, name: 'inboundIds' });
+  const speedLimitInbounds = inbounds.filter(
+    (inbound) =>
+      (isEdit ? attachedIds : inboundIds)?.includes(inbound.id) &&
+      supportsSpeedLimits(inbound.protocol, inbound.nodeId),
+  );
   const delayedStart = useWatch({ control: methods.control, name: 'delayedStart' });
   const delayedDays = useWatch({ control: methods.control, name: 'delayedDays' });
   const expiryDate = useWatch({ control: methods.control, name: 'expiryDate' });
@@ -867,7 +875,24 @@ export default function ClientFormModal({
           { isEdit: false, email: clientPayload.email as string, externalLinks },
         );
       }
-      if (msg?.success) close();
+      if (msg?.success) {
+        if (!isEdit && newSpeedLimit > 0) {
+          const email = String(clientPayload.email).toLowerCase();
+          const results = await Promise.all(
+            speedLimitInbounds.map(async ({ id }) => {
+              const limits = await getSpeedLimits(id);
+              const row = limits.obj?.find(
+                (entry) => entry.clientId > 0 && entry.email.toLowerCase() === email,
+              );
+              if (!limits.success || !row) return false;
+              return (await saveSpeedLimit(id, row.clientId, newSpeedLimit)).success;
+            }),
+          );
+          if (results.includes(false))
+            messageApi.error(t('pages.inbounds.speedLimitAfterCreateError'));
+        }
+        close();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -888,7 +913,10 @@ export default function ClientFormModal({
           body: { maxHeight: 'calc(100vh - 160px)', overflowY: 'auto', overflowX: 'hidden' },
         }}
         onCancel={close}
-        afterClose={() => setActiveTab('basic')}
+        afterClose={() => {
+          setActiveTab('basic');
+          setNewSpeedLimit(0);
+        }}
         footer={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isEdit && resetTraffic && (
@@ -938,6 +966,38 @@ export default function ClientFormModal({
                   label: t('pages.clients.tabBasics'),
                   children: (
                     <>
+                      {(!isEdit || speedLimitInbounds.length > 0) && (
+                        <Form.Item
+                          label={t('pages.inbounds.speedLimits')}
+                          tooltip={!isEdit ? t('pages.inbounds.clientSpeedLimitHelp') : undefined}
+                        >
+                          {isEdit && client ? (
+                            <Space wrap>
+                              {speedLimitInbounds.map((inbound) => (
+                                <InboundSpeedLimits
+                                  key={inbound.id}
+                                  id={inbound.id}
+                                  clientEmail={client.email}
+                                  label={inbound.remark || inbound.tag}
+                                  zIndex={CLIENT_IP_LOG_MODAL_Z_INDEX}
+                                />
+                              ))}
+                            </Space>
+                          ) : (
+                            <InputNumber
+                              aria-label={t('pages.inbounds.speedLimitRate')}
+                              disabled={speedLimitInbounds.length === 0}
+                              min={0}
+                              max={1000}
+                              step={0.01}
+                              precision={2}
+                              suffix="MB/s"
+                              value={newSpeedLimit}
+                              onChange={(value) => setNewSpeedLimit(Number(value) || 0)}
+                            />
+                          )}
+                        </Form.Item>
+                      )}
                       <Row gutter={16}>
                         <Col xs={24} md={12}>
                           <Form.Item

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import ClientFormModal from '@/pages/clients/ClientFormModal';
@@ -70,4 +70,10 @@ describe('ClientFormModal credential tooltips', () => {
       );
     });
   });
+});
+
+it('shows the speed limit field on the add client form before selecting an inbound', () => {
+  renderModal();
+  const rate = screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Speed in MB/s' });
+  expect(rate.disabled).toBe(true);
 });
