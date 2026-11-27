@@ -18,9 +18,13 @@ The default bundle directory is saeedxui next to this script. Its layout is:
 
 Installation uses a complete local bundle or builds missing release files.
 On source builds, missing system packages are installed with the Linux package
-manager (using sudo when needed). Missing or older Go and Node.js/npm are
-downloaded into the temporary build directory for this run. A prebuilt bundle
-skips toolchain setup. Source builds require internet access for uncached files.
+manager (using sudo when needed). If Go is missing or too old, the script
+installs docker.io on APT-based systems when Docker is missing. It pulls
+Go from ArvanCloud using Docker, retries immediately on
+failure, and extracts Go into the temporary build directory. Press Ctrl+C to
+stop retries. Missing or older Node.js/npm is downloaded separately.
+A prebuilt bundle skips toolchain setup. Set GOPROXY to override the module
+proxy and its direct-source fallback.
 Copy geoip.dat, additional geo data, and the optional MTProto sidecar to
 the bundle's bin/ directory. An existing
 installation can supply these assets. On a fresh install without geoip.dat,
@@ -101,8 +105,43 @@ download_archive() {
     (cd "$stage" && printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c -)
 }
 
+extract_go_from_docker() (
+    local version="$1" variant=bookworm image mirror_image container
+    local -a elevate=()
+    if ! command -v docker >/dev/null; then
+        command -v apt >/dev/null || fail "Install Docker or put Go $version or newer on PATH."
+        if (( EUID != 0 )); then
+            command -v sudo >/dev/null || fail "Installing docker.io requires root access."
+            elevate=(sudo)
+        fi
+        "${elevate[@]}" apt update
+        "${elevate[@]}" apt install -y docker.io
+        if ! docker info >/dev/null 2>&1 && command -v systemctl >/dev/null; then
+            "${elevate[@]}" systemctl start docker
+        fi
+    fi
+    docker info >/dev/null || fail "Start Docker and ensure this user can access its daemon."
+
+    case "$platform" in
+        riscv64|s390x) variant=trixie ;;
+        armv6) variant=alpine ;;
+    esac
+    image="golang:$version-$variant"
+    mirror_image="docker.arvancloud.ir/$image"
+    if ! docker image inspect "$mirror_image" >/dev/null 2>&1; then
+        while true; do
+            docker pull "$mirror_image" && break
+        done
+    fi
+    docker tag "$mirror_image" "$image"
+    container="$(docker create "$image")"
+    trap 'docker rm "$container" >/dev/null || true' EXIT
+    install -d "$stage/go"
+    docker cp "$container:/usr/local/go/." "$stage/go/"
+)
+
 prepare_build_tools() {
-    local dependency go_min go_installed go_arch node_major node_installed npm_installed
+    local dependency go_min go_installed node_major node_installed npm_installed
     local node_arch archive checksum node_url node_release
     for dependency in git curl tar gzip xz sha256sum; do
         if ! command -v "$dependency" >/dev/null; then
@@ -120,16 +159,7 @@ prepare_build_tools() {
     go_min="$(awk '$1 == "go" {print $2; exit}' "$repo_dir/go.mod")"
     go_installed="$(GOTOOLCHAIN=local go version 2>/dev/null | awk '{sub(/^go/, "", $3); print $3}' || true)"
     if ! version_at_least "$go_installed" "$go_min"; then
-        go_arch="$platform"
-        case "$platform" in armv6|armv7) go_arch=armv6l ;; esac
-        archive="go$go_min.linux-$go_arch.tar.gz"
-        download_file 'https://go.dev/dl/?mode=json&include=all' "$stage/go-releases.json"
-        checksum="$(awk -F '"' -v file="$archive" '
-            $2 == "filename" {match_file = ($4 == file)}
-            match_file && $2 == "sha256" {print $4; exit}
-        ' "$stage/go-releases.json")"
-        download_archive "https://go.dev/dl/$archive" "$archive" "$checksum"
-        tar -xzf "$stage/$archive" -C "$stage"
+        extract_go_from_docker "$go_min"
         export PATH="$stage/go/bin:$PATH"
     fi
 
@@ -170,6 +200,9 @@ if [[ "$mode" == build || ! -s "$app/x-ui" || ! -s "$core" || ! -s "$app/$unit" 
     stage="$(mktemp -d)"
     trap 'rm -rf -- "$stage"' EXIT
     prepare_build_tools
+    if [[ -z "${GOPROXY+x}" && "$(go env GOPROXY)" == 'https://proxy.golang.org,direct' ]]; then
+        export GOPROXY='https://proxy.golang.org|direct'
+    fi
     (
         cd "$repo_dir/frontend"
         npm ci
