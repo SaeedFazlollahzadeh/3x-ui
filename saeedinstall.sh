@@ -17,9 +17,12 @@ The default bundle directory is saeedxui next to this script. Its layout is:
   usr/local/x-ui/           panel binary, service units, and bin/ assets
 
 Installation uses a complete local bundle or builds missing release files.
-Source builds need Linux, Go (see go.mod), Node.js 26+, npm, and a C compiler.
-Go and npm may fetch dependencies. Copy geoip.dat, any additional geo data,
-and the optional MTProto sidecar to the bundle's bin/ directory. An existing
+On source builds, missing system packages are installed with the Linux package
+manager (using sudo when needed). Missing or older Go and Node.js/npm are
+downloaded into the temporary build directory for this run. A prebuilt bundle
+skips toolchain setup. Source builds require internet access for uncached files.
+Copy geoip.dat, additional geo data, and the optional MTProto sidecar to
+the bundle's bin/ directory. An existing
 installation can supply these assets. On a fresh install without geoip.dat,
 the script fetches that data file for the default Xray configuration.
 HELP
@@ -57,17 +60,108 @@ case " ${ID:-} ${ID_LIKE:-} " in
     *) unit=x-ui.service.debian ;;
 esac
 
+install_build_packages() {
+    local -a elevate=()
+    if (( EUID != 0 )); then
+        command -v sudo >/dev/null || fail "Missing system packages. Run with root access or install a C compiler, libc headers, git, curl, CA certificates, tar, gzip, xz, and coreutils."
+        elevate=(sudo)
+    fi
+
+    if command -v apt-get >/dev/null; then
+        "${elevate[@]}" apt-get update
+        "${elevate[@]}" apt-get install -y build-essential git curl ca-certificates tar gzip xz-utils coreutils
+    elif command -v dnf >/dev/null; then
+        "${elevate[@]}" dnf install -y gcc glibc-devel git curl ca-certificates tar gzip xz coreutils
+    elif command -v yum >/dev/null; then
+        "${elevate[@]}" yum install -y gcc glibc-devel git curl ca-certificates tar gzip xz coreutils
+    elif command -v pacman >/dev/null; then
+        "${elevate[@]}" pacman -S --needed --noconfirm gcc glibc git curl ca-certificates tar gzip xz coreutils
+    elif command -v zypper >/dev/null; then
+        "${elevate[@]}" zypper --non-interactive install gcc glibc-devel git curl ca-certificates tar gzip xz coreutils
+    else
+        fail "Install a C compiler, libc headers, git, curl, CA certificates, tar, gzip, xz, and coreutils using your distribution's package manager."
+    fi
+}
+
+version_at_least() {
+    [[ "$1" =~ ^[0-9]+([.][0-9]+){0,2}$ ]] &&
+        [[ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
+}
+
+download_archive() {
+    local url="$1" archive="$2" checksum="$3"
+    [[ "$checksum" =~ ^[[:xdigit:]]{64}$ ]] || fail "No published SHA-256 checksum for $archive."
+    curl -fsSL --retry 3 "$url" -o "$stage/$archive"
+    (cd "$stage" && printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c -)
+}
+
+prepare_build_tools() {
+    local dependency go_min go_installed go_arch node_major node_installed npm_installed
+    local node_arch archive checksum node_url
+    for dependency in git curl tar gzip xz sha256sum; do
+        if ! command -v "$dependency" >/dev/null; then
+            install_build_packages
+            break
+        fi
+    done
+    if ! printf '#include <stdlib.h>\nint main(void) { return 0; }\n' |
+        "${CC:-cc}" -x c - -o "$stage/compiler-check" 2>/dev/null; then
+        install_build_packages
+        printf '#include <stdlib.h>\nint main(void) { return 0; }\n' |
+            "${CC:-cc}" -x c - -o "$stage/compiler-check" || fail "A working C compiler and libc headers are required."
+    fi
+
+    go_min="$(awk '$1 == "go" {print $2; exit}' "$repo_dir/go.mod")"
+    go_installed="$(GOTOOLCHAIN=local go version 2>/dev/null | awk '{sub(/^go/, "", $3); print $3}' || true)"
+    if ! version_at_least "$go_installed" "$go_min"; then
+        go_arch="$platform"
+        case "$platform" in armv6|armv7) go_arch=armv6l ;; esac
+        archive="go$go_min.linux-$go_arch.tar.gz"
+        curl -fsSL --retry 3 'https://go.dev/dl/?mode=json&include=all' -o "$stage/go-releases.json"
+        checksum="$(awk -F '"' -v file="$archive" '
+            $2 == "filename" {match_file = ($4 == file)}
+            match_file && $2 == "sha256" {print $4; exit}
+        ' "$stage/go-releases.json")"
+        download_archive "https://go.dev/dl/$archive" "$archive" "$checksum"
+        tar -xzf "$stage/$archive" -C "$stage"
+        export PATH="$stage/go/bin:$PATH"
+    fi
+
+    node_major="$(tr -d '[:space:]' < "$repo_dir/.nvmrc")"
+    node_installed="$(node --version 2>/dev/null || true)"
+    npm_installed="$(npm --version 2>/dev/null || true)"
+    if ! version_at_least "${node_installed#v}" "$node_major.0.0" ||
+       ! version_at_least "$npm_installed" 11.0.0; then
+        case "$platform" in
+            amd64) node_arch=x64 ;;
+            arm64|ppc64le|s390x|riscv64) node_arch="$platform" ;;
+            *) fail "Install Node.js $node_major or newer and npm 11 or newer for $platform before building." ;;
+        esac
+        node_url="https://nodejs.org/dist/latest-v$node_major.x"
+        curl -fsSL --retry 3 "$node_url/SHASUMS256.txt" -o "$stage/node-checksums"
+        read -r checksum archive < <(awk -v suffix="-linux-$node_arch.tar.xz" '
+            substr($2, length($2) - length(suffix) + 1) == suffix {print $1, $2; exit}
+        ' "$stage/node-checksums") || fail "No official Node.js $node_major archive for $platform. Install Node.js and npm on this host before building."
+        [[ "$archive" =~ ^node-v[0-9]+[.][0-9]+[.][0-9]+-linux-[a-z0-9]+[.]tar[.]xz$ ]] ||
+            fail "Unexpected Node.js archive name."
+        download_archive "$node_url/$archive" "$archive" "$checksum"
+        tar -xJf "$stage/$archive" -C "$stage"
+        export PATH="$stage/${archive%.tar.xz}/bin:$PATH"
+    fi
+    go version
+    node --version
+    npm --version
+}
+
 app="$bundle/usr/local/x-ui"
 cli="$bundle/usr/bin/x-ui"
 core_arch="$platform"
 case "$platform" in armv6|armv7) core_arch=arm32 ;; esac
 core="$app/bin/xray-linux-$core_arch"
 if [[ "$mode" == build || ! -s "$app/x-ui" || ! -s "$core" || ! -s "$app/$unit" ]]; then
-    for dependency in go node npm "${CC:-cc}"; do
-        command -v "$dependency" >/dev/null || fail "Source build requires $dependency."
-    done
     stage="$(mktemp -d)"
     trap 'rm -rf -- "$stage"' EXIT
+    prepare_build_tools
     (
         cd "$repo_dir/frontend"
         npm ci
@@ -76,6 +170,7 @@ if [[ "$mode" == build || ! -s "$app/x-ui" || ! -s "$core" || ! -s "$app/$unit" 
     (
         cd "$repo_dir"
         CGO_ENABLED=1 go build -trimpath -ldflags '-s -w' -o "$stage/x-ui" .
+        ./scripts/build-saeed-xray.sh "$stage/xray"
     )
     install -d "$app/bin" "$bundle/etc/x-ui" "$(dirname -- "$cli")"
     install -m 0755 "$stage/x-ui" "$app/x-ui"
