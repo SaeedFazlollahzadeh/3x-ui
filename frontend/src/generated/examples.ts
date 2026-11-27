@@ -533,6 +533,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "oldValue": "10737418240",
     "source": "panel"
   },
+  "ClientDailyTraffic": {
+    "day": "",
+    "down": 0,
+    "up": 0
+  },
   "ClientInbound": {
     "clientId": 0,
     "createdAt": 0,
@@ -692,6 +697,12 @@ export const EXAMPLES: Record<string, unknown> = {
     "traffic": null,
     "updatedAt": 1735100000000
   },
+  "ClientSubscriptionFetch": {
+    "at": 0,
+    "id": 0,
+    "ip": "",
+    "userAgent": ""
+  },
   "ClientTraffic": {
     "down": 2097152,
     "email": "user1",
@@ -720,6 +731,17 @@ export const EXAMPLES: Record<string, unknown> = {
     "up": 1048576
   },
   "ClientUsageHistory": {
+    "accessLogs": [
+      {
+        "DateTime": "2025-01-01T12:00:00Z",
+        "Email": "alice@example.com",
+        "Event": 0,
+        "FromAddress": "192.0.2.10:54321",
+        "Inbound": "inbound-443",
+        "Outbound": "direct",
+        "ToAddress": "example.com:443"
+      }
+    ],
     "changes": [
       {
         "at": 1735689600000,
@@ -733,6 +755,13 @@ export const EXAMPLES: Record<string, unknown> = {
     ],
     "currentDown": 2097152,
     "currentUp": 1048576,
+    "dailyTraffic": [
+      {
+        "day": "",
+        "down": 0,
+        "up": 0
+      }
+    ],
     "email": "user1@example.com",
     "lifetimeDown": 21474836480,
     "lifetimeUp": 10737418240,
@@ -742,6 +771,14 @@ export const EXAMPLES: Record<string, unknown> = {
         "nodeId": 7,
         "nodeName": "de-fra-1",
         "up": 1048576
+      }
+    ],
+    "subscriptionFetches": [
+      {
+        "at": 0,
+        "id": 0,
+        "ip": "",
+        "userAgent": ""
       }
     ],
     "windows": [
@@ -1037,6 +1074,11 @@ export const EXAMPLES: Record<string, unknown> = {
     "wgDns": "",
     "wgMtu": 0,
     "wgPublicKey": ""
+  },
+  "InboundSpeedLimitEntry": {
+    "bytesPerSecond": 0,
+    "clientId": 0,
+    "email": ""
   },
   "InboundTrafficSummary": {
     "down": 2097152,

@@ -1255,6 +1255,9 @@ func (s *InboundService) setRemoteTrafficLocked(nodeID int, snap *runtime.Traffi
 					if err := s.mergeNodeClientTraffic(tx, cs, canon, clientFrozen, deltaUp, deltaDown, now); err != nil {
 						return false, err
 					}
+					if err := addClientDailyTraffic(tx, cs.Email, time.UnixMilli(now), deltaUp, deltaDown); err != nil {
+						return false, err
+					}
 					*row = next
 				}
 			}

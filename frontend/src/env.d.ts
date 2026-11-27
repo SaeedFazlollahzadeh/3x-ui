@@ -25,6 +25,7 @@ interface SubPageData {
   announce?: string;
   downloadByte?: string | number;
   uploadByte?: string | number;
+  dailyTraffic?: import('@/components/clients/DailyTrafficChart').DailyTraffic[];
   usedByte?: string | number;
 }
 

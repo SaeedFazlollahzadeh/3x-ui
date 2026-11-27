@@ -203,6 +203,9 @@ func (s *InboundService) addClientTraffic(tx *gorm.DB, traffics []*xray.ClientTr
 		).Error; err != nil {
 			return fmt.Errorf("update traffic for %s: %w", ct.Email, err)
 		}
+		if err := addClientDailyTraffic(tx, ct.Email, time.UnixMilli(now), t.Up, t.Down); err != nil {
+			return fmt.Errorf("record daily traffic for %s: %w", ct.Email, err)
+		}
 	}
 
 	// adjustTraffics converts delayed-start rows (negative ExpiryTime → absolute

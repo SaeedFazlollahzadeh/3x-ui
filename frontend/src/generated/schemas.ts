@@ -2207,6 +2207,28 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientDailyTraffic": {
+    "description": "ClientDailyTraffic stores counted bytes independently of quota resets.",
+    "properties": {
+      "day": {
+        "type": "string"
+      },
+      "down": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "up": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "day",
+      "down",
+      "up"
+    ],
+    "type": "object"
+  },
   "ClientInbound": {
     "properties": {
       "clientId": {
@@ -2688,6 +2710,32 @@ export const SCHEMAS: Record<string, unknown> = {
     ],
     "type": "object"
   },
+  "ClientSubscriptionFetch": {
+    "description": "ClientSubscriptionFetch records a successful retrieval of a subscription body.",
+    "properties": {
+      "at": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "id": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "ip": {
+        "type": "string"
+      },
+      "userAgent": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "at",
+      "id",
+      "ip",
+      "userAgent"
+    ],
+    "type": "object"
+  },
   "ClientTraffic": {
     "description": "ClientTraffic represents traffic statistics and limits for a specific client.\nIt tracks upload/download usage, expiry times, and online status for inbound clients.",
     "properties": {
@@ -2837,6 +2885,12 @@ export const SCHEMAS: Record<string, unknown> = {
   "ClientUsageHistory": {
     "description": "ClientUsageHistory is what the client editor's history button shows.",
     "properties": {
+      "accessLogs": {
+        "items": {
+          "$ref": "#/components/schemas/LogEntry"
+        },
+        "type": "array"
+      },
       "changes": {
         "items": {
           "$ref": "#/components/schemas/ClientChangeLog"
@@ -2852,6 +2906,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "example": 1048576,
         "format": "int64",
         "type": "integer"
+      },
+      "dailyTraffic": {
+        "items": {
+          "$ref": "#/components/schemas/ClientDailyTraffic"
+        },
+        "type": "array"
       },
       "email": {
         "example": "user1@example.com",
@@ -2873,6 +2933,12 @@ export const SCHEMAS: Record<string, unknown> = {
         },
         "type": "array"
       },
+      "subscriptionFetches": {
+        "items": {
+          "$ref": "#/components/schemas/ClientSubscriptionFetch"
+        },
+        "type": "array"
+      },
       "windows": {
         "items": {
           "$ref": "#/components/schemas/ClientTrafficWindow"
@@ -2881,13 +2947,16 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
+      "accessLogs",
       "changes",
       "currentDown",
       "currentUp",
+      "dailyTraffic",
       "email",
       "lifetimeDown",
       "lifetimeUp",
       "nodes",
+      "subscriptionFetches",
       "windows"
     ],
     "type": "object"
@@ -3954,6 +4023,25 @@ export const SCHEMAS: Record<string, unknown> = {
       "ssMethod",
       "tag",
       "tlsFlowCapable"
+    ],
+    "type": "object"
+  },
+  "InboundSpeedLimitEntry": {
+    "properties": {
+      "bytesPerSecond": {
+        "type": "integer"
+      },
+      "clientId": {
+        "type": "integer"
+      },
+      "email": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytesPerSecond",
+      "clientId",
+      "email"
     ],
     "type": "object"
   },

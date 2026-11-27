@@ -12,6 +12,7 @@ import {
 
 import { ClipboardManager, LanguageManager } from '@/utils';
 import { setMessageInstance } from '@/utils/messageBus';
+import DailyTrafficChart from '@/components/clients/DailyTrafficChart';
 import { useTheme } from '@/hooks/useTheme';
 import SubAppsTab from './SubAppsTab';
 import SubConfigsTab from './SubConfigsTab';
@@ -151,6 +152,11 @@ export default function SubPage() {
             />
             {announce && <Alert type="info" showIcon title={announce} className="sub-announce" />}
             <SubHero {...heroData} lang={lang} />
+            {!!subData.dailyTraffic?.length && (
+              <Card>
+                <DailyTrafficChart days={subData.dailyTraffic} />
+              </Card>
+            )}
             {tabs.length > 0 && <Tabs className="sub-tabs" tabBarGutter={24} items={tabs} />}
             {(updateHours > 0 || subSupportUrl) && (
               <footer className="sub-footer">

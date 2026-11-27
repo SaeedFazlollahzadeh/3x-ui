@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
+	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/amneziawg"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -490,14 +491,41 @@ func (s *SubService) overlayInboundTunnelIdentity(inbound *model.Inbound, client
 	return out, nil
 }
 
-// RecordSubscriptionFetch records a successful subscription response for all clients sharing subId.
-func (s *SubService) RecordSubscriptionFetch(subId string) error {
-	if strings.TrimSpace(subId) == "" {
+// RecordSubscriptionFetch records a successful subscription response for all clients sharing subID.
+func (s *SubService) RecordSubscriptionFetch(subID, userAgent, ip string) error {
+	db := database.GetDB()
+	if db == nil || strings.TrimSpace(subID) == "" {
 		return nil
 	}
-	return database.GetDB().Model(&xray.ClientTraffic{}).
-		Where("email IN (SELECT email FROM clients WHERE sub_id = ?)", subId).
-		Update("last_sub_fetch", time.Now().UnixMilli()).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		var clients []model.ClientRecord
+		if err := tx.Select("id", "email").Where("sub_id = ?", subID).Order("email").Find(&clients).Error; err != nil {
+			return err
+		}
+		now := time.Now().UnixMilli()
+		for _, client := range clients {
+			if err := tx.Model(&xray.ClientTraffic{}).Where("email = ?", client.Email).
+				Update("last_sub_fetch", now).Error; err != nil {
+				return err
+			}
+			row := model.ClientSubscriptionFetch{ClientID: client.Id, At: now, UserAgent: userAgent, IP: ip}
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+			var cutoff int64
+			result := tx.Model(&model.ClientSubscriptionFetch{}).Select("id").Where("client_id = ?", client.Id).
+				Order("id DESC").Offset(99).Limit(1).Scan(&cutoff)
+			if result.Error != nil {
+				return result.Error
+			}
+			if cutoff > 0 {
+				if err := tx.Where("client_id = ? AND id < ?", client.Id, cutoff).Delete(&model.ClientSubscriptionFetch{}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // GetSubs retrieves subscription links for a given subscription ID and host.
@@ -3384,6 +3412,7 @@ func searchHost(headers any) string {
 // PageData is a view model for subpage.html
 // PageData contains data for rendering the subscription information page.
 type PageData struct {
+	DailyTraffic  []model.ClientDailyTraffic
 	Host          string
 	BasePath      string
 	SId           string

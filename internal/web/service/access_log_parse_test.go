@@ -208,3 +208,16 @@ func TestReadAccessLogLine(t *testing.T) {
 		t.Errorf("after the last line: err = %v, want io.EOF", err)
 	}
 }
+
+func TestClientAccessHistoryMatchesExactIdentity(t *testing.T) {
+	lines := []string{
+		"2024/01/02 15:04:05 from 1.2.3.4:555 accepted tcp:elsewhere.example:443 [other >> direct] email: alice-extra",
+		"2024/01/02 15:04:06 from 1.2.3.4:555 accepted https://example.com/path?token=secret [test >> direct] email: alice",
+		"2024/01/02 15:04:07 from 1.2.3.4:555 accepted tcp:2.3.4.5:443 [test >> direct] email: alice",
+	}
+	writeAccessLog(t, len(lines), func(i int) string { return lines[i] })
+	entries := (&ServerService{}).readXrayLogs("100", "", "", "", "", nil, nil, "alice")
+	if len(entries) != 2 || entries[0].Inbound != "test" || entries[0].ToAddress != "example.com" || entries[1].ToAddress != "tcp:2.3.4.5:443" {
+		t.Fatalf("unexpected client access history: %+v", entries)
+	}
+}

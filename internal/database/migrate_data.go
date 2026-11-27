@@ -63,6 +63,9 @@ func migrationModels() []any {
 		&model.SubBalancer{},
 		&model.TuicTrafficReceipt{},
 		&model.ClientTrafficWindow{},
+		&model.ClientDailyTraffic{},
+		&model.InboundSpeedLimit{},
+		&model.ClientSubscriptionFetch{},
 		&model.ClientChangeLog{},
 	}
 }

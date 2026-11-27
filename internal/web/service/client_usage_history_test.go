@@ -588,3 +588,60 @@ func itoa(v int64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+func TestDailyTrafficAccumulatesAcrossQuotaReset(t *testing.T) {
+	const email = "daily@example.com"
+	svc := &InboundService{}
+	seedUsageHistoryClient(t, svc, email, "b49e5c40-4586-4768-9482-72407f1c4c82", 0, 0)
+	usage := []*xray.ClientTraffic{{Email: email, Up: 100, Down: 200}}
+	if _, _, err := svc.AddTraffic(nil, usage); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ResetClientTrafficByEmail(email); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.AddTraffic(nil, usage); err != nil {
+		t.Fatal(err)
+	}
+	history, err := (&ClientService{}).GetUsageHistory(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history.DailyTraffic) != 30 {
+		t.Fatalf("got %d days, want 30", len(history.DailyTraffic))
+	}
+	today := history.DailyTraffic[29]
+	if today.Up != 200 || today.Down != 400 {
+		t.Fatalf("daily traffic after reset = %+v", today)
+	}
+}
+
+func TestInboundSpeedLimitsResolveByClientMembership(t *testing.T) {
+	const email = "limited@example.com"
+	svc := &InboundService{}
+	inbound := seedUsageHistoryClient(t, svc, email, "b49e5c40-4586-4768-9482-72407f1c4c82", 0, 0)
+	rows, err := svc.GetInboundSpeedLimits(inbound.Id)
+	if err != nil || len(rows) != 2 || rows[1].Email != email || rows[1].ClientID <= 0 {
+		t.Fatalf("speed limit entries = %+v, error = %v", rows, err)
+	}
+	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 1_000_000); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := buildInboundSpeedLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var limits map[string]map[string]int
+	if err := json.Unmarshal(raw, &limits); err != nil {
+		t.Fatal(err)
+	}
+	if limits[inbound.Tag][email] != 1_000_000 || limits[inbound.Tag][""] != 0 {
+		t.Fatalf("unexpected runtime speed limits: %s", raw)
+	}
+	if err := svc.SetInboundSpeedLimit(inbound.Id, rows[1].ClientID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := buildInboundSpeedLimits(); err != nil || len(raw) != 0 {
+		t.Fatalf("cleared speed limits = %s, error = %v", raw, err)
+	}
+}

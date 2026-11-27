@@ -517,6 +517,12 @@ export interface ClientChangeLog {
   source: string;
 }
 
+export interface ClientDailyTraffic {
+  day: string;
+  down: number;
+  up: number;
+}
+
 export interface ClientInbound {
   clientId: number;
   createdAt: number;
@@ -625,6 +631,13 @@ export interface ClientSlim {
   updatedAt: number;
 }
 
+export interface ClientSubscriptionFetch {
+  at: number;
+  id: number;
+  ip: string;
+  userAgent: string;
+}
+
 export interface ClientTraffic {
   down: number;
   email: string;
@@ -655,13 +668,16 @@ export interface ClientTrafficWindow {
 }
 
 export interface ClientUsageHistory {
+  accessLogs: LogEntry[];
   changes: ClientChangeLog[];
   currentDown: number;
   currentUp: number;
+  dailyTraffic: ClientDailyTraffic[];
   email: string;
   lifetimeDown: number;
   lifetimeUp: number;
   nodes: ClientNodeUsage[];
+  subscriptionFetches: ClientSubscriptionFetch[];
   windows: ClientTrafficWindow[];
 }
 
@@ -895,6 +911,12 @@ export interface InboundOption {
   wgDns?: string;
   wgMtu?: number;
   wgPublicKey?: string;
+}
+
+export interface InboundSpeedLimitEntry {
+  bytesPerSecond: number;
+  clientId: number;
+  email: string;
 }
 
 export interface InboundTrafficSummary {

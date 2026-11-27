@@ -682,6 +682,17 @@ func (p *process) refreshVersion() {
 	p.mu.Unlock()
 }
 
+// CheckSpeedLimitSupport verifies that the selected core contains the dispatcher extension.
+func CheckSpeedLimitSupport(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, xrayVersionTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, GetBinaryPath(), "--xui-speed-limit-support").Output()
+	if err != nil || strings.TrimSpace(string(output)) != "xui-speed-limits-v1" {
+		return errors.New("speed limits require the Xray core built by saeedinstall.sh")
+	}
+	return nil
+}
+
 // Start launches the Xray process with the current configuration.
 func (p *process) Start() (err error) {
 	if p.IsRunning() {
@@ -695,6 +706,11 @@ func (p *process) Start() (err error) {
 		}
 	}()
 
+	if len(p.config.SpeedLimits) > 0 {
+		if err := CheckSpeedLimitSupport(context.Background()); err != nil {
+			return err
+		}
+	}
 	data, err := json.MarshalIndent(p.config, "", "  ")
 	if err != nil {
 		return common.NewErrorf("Failed to generate XRAY configuration files: %v", err)
@@ -715,6 +731,14 @@ func (p *process) Start() (err error) {
 	}
 
 	cmd := exec.CommandContext(context.Background(), GetBinaryPath(), "-c", configPath)
+	cmd.Env = append(os.Environ(), "XUI_XRAY_SPEED_LIMIT_FILE=")
+	if len(p.config.SpeedLimits) > 0 {
+		path := configPath + ".limits.json"
+		if err := writeFileAtomic(path, p.config.SpeedLimits, 0o600); err != nil {
+			return err
+		}
+		cmd.Env = append(cmd.Env, "XUI_XRAY_SPEED_LIMIT_FILE="+path)
+	}
 	cmd.Stdout = p.logWriter
 	cmd.Stderr = p.logWriter
 

@@ -538,6 +538,13 @@ export const ClientChangeLogSchema = z.object({
 });
 export type ClientChangeLog = z.infer<typeof ClientChangeLogSchema>;
 
+export const ClientDailyTrafficSchema = z.object({
+  day: z.string(),
+  down: z.number().int(),
+  up: z.number().int(),
+});
+export type ClientDailyTraffic = z.infer<typeof ClientDailyTrafficSchema>;
+
 export const ClientInboundSchema = z.object({
   clientId: z.number().int(),
   createdAt: z.number().int(),
@@ -654,6 +661,14 @@ export const ClientSlimSchema = z.object({
 });
 export type ClientSlim = z.infer<typeof ClientSlimSchema>;
 
+export const ClientSubscriptionFetchSchema = z.object({
+  at: z.number().int(),
+  id: z.number().int(),
+  ip: z.string(),
+  userAgent: z.string(),
+});
+export type ClientSubscriptionFetch = z.infer<typeof ClientSubscriptionFetchSchema>;
+
 export const ClientTrafficSchema = z.object({
   down: z.number().int(),
   email: z.string(),
@@ -686,13 +701,16 @@ export const ClientTrafficWindowSchema = z.object({
 export type ClientTrafficWindow = z.infer<typeof ClientTrafficWindowSchema>;
 
 export const ClientUsageHistorySchema = z.object({
+  accessLogs: z.array(z.lazy(() => LogEntrySchema)),
   changes: z.array(z.lazy(() => ClientChangeLogSchema)),
   currentDown: z.number().int(),
   currentUp: z.number().int(),
+  dailyTraffic: z.array(z.lazy(() => ClientDailyTrafficSchema)),
   email: z.string(),
   lifetimeDown: z.number().int(),
   lifetimeUp: z.number().int(),
   nodes: z.array(z.lazy(() => ClientNodeUsageSchema)),
+  subscriptionFetches: z.array(z.lazy(() => ClientSubscriptionFetchSchema)),
   windows: z.array(z.lazy(() => ClientTrafficWindowSchema)),
 });
 export type ClientUsageHistory = z.infer<typeof ClientUsageHistorySchema>;
@@ -946,6 +964,13 @@ export const InboundOptionSchema = z.object({
   wgPublicKey: z.string().optional(),
 });
 export type InboundOption = z.infer<typeof InboundOptionSchema>;
+
+export const InboundSpeedLimitEntrySchema = z.object({
+  bytesPerSecond: z.number().int(),
+  clientId: z.number().int(),
+  email: z.string(),
+});
+export type InboundSpeedLimitEntry = z.infer<typeof InboundSpeedLimitEntrySchema>;
 
 export const InboundTrafficSummarySchema = z.object({
   down: z.number().int(),

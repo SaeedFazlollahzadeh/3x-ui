@@ -31,7 +31,7 @@ func TestRecordSubscriptionFetch(t *testing.T) {
 	}
 
 	before := time.Now().UnixMilli()
-	if err := (&SubService{}).RecordSubscriptionFetch("sub-alpha"); err != nil {
+	if err := (&SubService{}).RecordSubscriptionFetch("sub-alpha", "", ""); err != nil {
 		t.Fatalf("RecordSubscriptionFetch: %v", err)
 	}
 
@@ -49,10 +49,10 @@ func TestRecordSubscriptionFetch(t *testing.T) {
 		t.Fatalf("bravo lastSubFetch = %d, want 0", bravo.LastSubFetch)
 	}
 
-	if err := (&SubService{}).RecordSubscriptionFetch("unknown"); err != nil {
+	if err := (&SubService{}).RecordSubscriptionFetch("unknown", "", ""); err != nil {
 		t.Fatalf("unknown subId: %v", err)
 	}
-	if err := (&SubService{}).RecordSubscriptionFetch(""); err != nil {
+	if err := (&SubService{}).RecordSubscriptionFetch("", "", ""); err != nil {
 		t.Fatalf("empty subId: %v", err)
 	}
 }
@@ -87,6 +87,8 @@ func TestRecordSubscriptionFetchStatusGate(t *testing.T) {
 	okRecorder := httptest.NewRecorder()
 	ok, _ := gin.CreateTestContext(okRecorder)
 	ok.Request = httptest.NewRequest(http.MethodGet, "/sub/sub-alpha", nil)
+	ok.Request.Header.Set("User-Agent", "Example VPN / Android")
+	ok.Request.RemoteAddr = "192.0.2.10:12345"
 	ok.Params = gin.Params{{Key: "subid", Value: "sub-alpha"}}
 	ok.Status(http.StatusOK)
 	controller.recordSubscriptionFetch(ok)
@@ -95,5 +97,12 @@ func TestRecordSubscriptionFetchStatusGate(t *testing.T) {
 	}
 	if traffic.LastSubFetch == 0 {
 		t.Fatal("200 did not update lastSubFetch")
+	}
+	var rows []model.ClientSubscriptionFetch
+	if err := db.Where("client_id = ?", client.Id).Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].UserAgent != "Example VPN / Android" || rows[0].IP != "192.0.2.10" {
+		t.Fatalf("unexpected subscription access records: %+v", rows)
 	}
 }

@@ -411,6 +411,39 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/inbounds/:id/speedLimits',
+        summary:
+          'Read the shared inbound cap and per-client caps for a supported local Xray inbound.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        responseSchema: 'InboundSpeedLimitEntry',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/speedLimits',
+        summary:
+          'Set a cap in bytes per second for each direction. Client ID 0 selects the whole inbound. A cap of 0 clears the selected limit.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' },
+          {
+            name: 'clientId',
+            in: 'body (json)',
+            type: 'number',
+            desc: 'Client ID, or 0 for the shared inbound cap.',
+          },
+          {
+            name: 'bytesPerSecond',
+            in: 'body (json)',
+            type: 'number',
+            desc: '0 or 10,000 to 1,000,000,000 bytes per second.',
+          },
+        ],
+        body: JSON.stringify({ clientId: 42, bytesPerSecond: 1000000 }, null, 2),
+        responseSchema: 'InboundSpeedLimitEntry',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
         path: '/panel/api/inbounds/:id/fallbacks',
         summary:
           "List the fallback rules attached to a master VLESS/Trojan TCP-TLS inbound. Each rule links one child inbound (the dest) to optional SNI/ALPN/path/dest/xver match criteria. When dest is empty the child inbound's listen+port is used.",

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"strconv"
 	"strings"
@@ -82,6 +83,8 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/allLinks", a.getAllInboundLinks)
 	g.GET("/get/:id", a.getInbound)
 	g.GET("/:id/fallbacks", a.getFallbacks)
+	g.GET("/:id/speedLimits", a.inboundSpeedLimits)
+	g.POST("/:id/speedLimits", a.inboundSpeedLimits)
 	g.GET("/amneziawgKernelReadiness", a.getAmneziaWGKernelReadiness)
 
 	g.POST("/add", a.addInbound)
@@ -522,4 +525,45 @@ func (a *InboundController) setFallbacks(c *gin.Context) {
 	}
 	a.xrayService.SetToNeedRestart()
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), nil)
+}
+
+func (a *InboundController) inboundSpeedLimits(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonObj(c, nil, err)
+		return
+	}
+	inbound, err := a.inboundService.GetInbound(id)
+	if err != nil {
+		jsonObj(c, nil, err)
+		return
+	}
+	user := session.GetLoginUser(c)
+	if user == nil || inbound.UserId != user.Id || !service.SupportsInboundSpeedLimits(inbound) {
+		jsonObj(c, nil, errors.New("speed limits are available for supported local Xray inbounds"))
+		return
+	}
+	if c.Request.Method == "POST" {
+		var input struct {
+			ClientID int  `json:"clientId"`
+			Bytes    *int `json:"bytesPerSecond" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			jsonObj(c, nil, err)
+			return
+		}
+		if *input.Bytes > 0 {
+			if err := xray.CheckSpeedLimitSupport(c.Request.Context()); err != nil {
+				jsonObj(c, nil, err)
+				return
+			}
+		}
+		if err := a.inboundService.SetInboundSpeedLimit(id, input.ClientID, *input.Bytes); err != nil {
+			jsonObj(c, nil, err)
+			return
+		}
+		a.xrayService.SetToNeedRestart()
+	}
+	rows, err := a.inboundService.GetInboundSpeedLimits(id)
+	jsonObj(c, rows, err)
 }

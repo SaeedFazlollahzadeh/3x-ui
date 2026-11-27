@@ -1,3 +1,4 @@
+import DailyTrafficChart from './DailyTrafficChart';
 import { useTranslation } from 'react-i18next';
 import { Modal, Spin, Table, Tag, Typography } from 'antd';
 
@@ -167,7 +168,10 @@ export default function ClientUsageHistoryModal({
       history.lifetimeDown > 0 ||
       history.windows.length > 0 ||
       history.nodes.length > 0 ||
-      history.changes.length > 0);
+      history.changes.length > 0 ||
+      !!history.dailyTraffic?.length ||
+      !!history.subscriptionFetches?.length ||
+      !!history.accessLogs?.length);
 
   return (
     <Modal
@@ -215,6 +219,51 @@ export default function ClientUsageHistoryModal({
               </tbody>
             </table>
           </section>
+          <DailyTrafficChart days={history!.dailyTraffic ?? []} />
+          {!!history!.subscriptionFetches?.length && (
+            <section>
+              <Typography.Title level={5}>
+                {t('pages.clients.subscriptionFetches')}
+              </Typography.Title>
+              <Table
+                rowKey="id"
+                size="small"
+                pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                dataSource={history!.subscriptionFetches}
+                columns={[
+                  {
+                    title: t('pages.clients.activityTime'),
+                    dataIndex: 'at',
+                    render: (at: number) => new Date(at).toLocaleString(),
+                  },
+                  { title: t('pages.clients.reportedDevice'), dataIndex: 'userAgent' },
+                  { title: 'IP', dataIndex: 'ip' },
+                ]}
+              />
+            </section>
+          )}
+          {!!history!.accessLogs?.length && (
+            <section>
+              <Typography.Title level={5}>
+                {t('pages.clients.recentXrayDestinations')}
+              </Typography.Title>
+              <Table
+                rowKey={(_, index) => String(index)}
+                size="small"
+                pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                dataSource={history!.accessLogs}
+                columns={[
+                  {
+                    title: t('pages.clients.activityTime'),
+                    dataIndex: 'DateTime',
+                    render: (at: string) => new Date(at).toLocaleString(),
+                  },
+                  { title: t('pages.clients.activityInbound'), dataIndex: 'Inbound' },
+                  { title: t('pages.clients.activityDestination'), dataIndex: 'ToAddress' },
+                ]}
+              />
+            </section>
+          )}
           {history!.nodes.length > 0 && (
             <section>
               <Typography.Title level={5} style={{ marginBottom: 8 }}>

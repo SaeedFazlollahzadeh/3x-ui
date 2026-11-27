@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -502,6 +504,10 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	xrayConfig.DNSConfig = dropRefusedScript(xrayConfig.DNSConfig, "dns", dnsScriptRefused)
 	if excludedClients > 0 {
 		logger.Infof("Xray config generated: excluded %d disabled client entries across %d inbounds", excludedClients, excludedInbounds)
+	}
+	xrayConfig.SpeedLimits, err = buildInboundSpeedLimits()
+	if err != nil {
+		return nil, err
 	}
 	return xrayConfig, nil
 }
@@ -1548,6 +1554,12 @@ func (s *XrayService) RestartXray(isForce bool) error {
 			logger.Debug("It does not need to restart Xray")
 			return repairUnavailableTuicRelays(xrayConfig, process.GetAPIPort())
 		}
+		if len(xrayConfig.SpeedLimits) > 0 {
+			if err := xray.CheckSpeedLimitSupport(context.Background()); err != nil {
+				xrayState.holdBack(err.Error())
+				return err
+			}
+		}
 		// A config the core cannot bind never replaces one that works: its failed
 		// start exits the core, and the watchdog would then loop on it forever.
 		if conflicts := bindConflicts(xrayConfig, process.GetConfig()); len(conflicts) > 0 {
@@ -1618,6 +1630,9 @@ func (s *XrayService) tryHotApply(process *xray.Process, newCfg *xray.Config) (a
 		}
 	}()
 	oldCfg := process.GetConfig()
+	if !bytes.Equal(oldCfg.SpeedLimits, newCfg.SpeedLimits) {
+		return false, nil
+	}
 	diff, ok := xray.ComputeHotDiff(oldCfg, newCfg)
 	if !ok {
 		logger.Debug("hot apply: config change is not API-applicable, falling back to restart")

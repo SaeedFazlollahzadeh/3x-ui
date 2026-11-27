@@ -1,3 +1,4 @@
+import InboundSpeedLimits from './InboundSpeedLimits';
 import { NativeSelect } from '@/components/form/NativeSelect';
 import { useEffect, useRef, useState, useId } from 'react';
 import type { KeyboardEvent } from 'react';
@@ -828,6 +829,13 @@ export default function InboundFormModal({
           {t('pages.inbounds.meansNoLimit')}
         </span>
       </Form.Item>
+
+      {mode === 'edit' &&
+        dbInbound &&
+        !dbInbound.nodeId &&
+        ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria', 'masque'].includes(protocol) && (
+          <InboundSpeedLimits id={dbInbound.id} />
+        )}
 
       <FormField name="trafficReset" label={t('pages.inbounds.periodicTrafficResetTitle')}>
         <NativeSelect

@@ -1,3 +1,5 @@
+import type { DailyTraffic } from '@/components/clients/DailyTrafficChart';
+
 export interface ClientTrafficWindowInfo {
   id: number;
   email: string;
@@ -33,6 +35,9 @@ export interface ClientUsageHistoryInfo {
   windows: ClientTrafficWindowInfo[];
   nodes: ClientNodeUsageInfo[];
   changes: ClientChangeInfo[];
+  dailyTraffic: DailyTraffic[];
+  subscriptionFetches: { id: number; at: number; userAgent: string; ip: string }[];
+  accessLogs: { DateTime: string; Inbound: string; ToAddress: string }[];
 }
 
 const num = (value: unknown, fallback = 0): number =>
@@ -53,6 +58,22 @@ export function normalizeClientUsageHistory(raw: unknown): ClientUsageHistoryInf
     lifetimeDown: num(obj.lifetimeDown),
     currentUp: num(obj.currentUp),
     currentDown: num(obj.currentDown),
+    dailyTraffic: rows(obj.dailyTraffic).map((d) => ({
+      day: String(d.day ?? ''),
+      up: num(d.up),
+      down: num(d.down),
+    })),
+    subscriptionFetches: rows(obj.subscriptionFetches).map((f) => ({
+      id: num(f.id),
+      at: num(f.at),
+      userAgent: String(f.userAgent ?? ''),
+      ip: String(f.ip ?? ''),
+    })),
+    accessLogs: rows(obj.accessLogs).map((a) => ({
+      DateTime: String(a.DateTime ?? ''),
+      Inbound: String(a.Inbound ?? ''),
+      ToAddress: String(a.ToAddress ?? ''),
+    })),
     windows: rows(obj.windows).map((w) => ({
       id: num(w.id),
       email: String(w.email ?? ''),

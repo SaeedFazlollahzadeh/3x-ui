@@ -1559,6 +1559,13 @@ func (s *ServerService) GetXrayLogs(
 	freedoms []string,
 	blackholes []string,
 ) []LogEntry {
+	return s.readXrayLogs(count, filter, showDirect, showBlocked, showProxy, freedoms, blackholes, "")
+}
+
+func (s *ServerService) readXrayLogs(
+	count, filter, showDirect, showBlocked, showProxy string,
+	freedoms, blackholes []string, email string,
+) []LogEntry {
 	const (
 		Direct = iota
 		Blocked
@@ -1605,6 +1612,16 @@ func (s *ServerService) GetXrayLogs(
 		}
 
 		entry := parseAccessLogFields(line)
+
+		if email != "" {
+			if !strings.EqualFold(entry.Email, email) || entry.ToAddress == "" || entry.DateTime.IsZero() {
+				continue
+			}
+			// HTTP proxy log entries can include a full URL with sensitive paths or query strings.
+			if target, err := url.Parse(entry.ToAddress); err == nil && target.Host != "" {
+				entry.ToAddress = target.Host
+			}
+		}
 
 		if logEntryContains(line, freedoms) {
 			if showDirect == "false" {

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -42,14 +43,17 @@ type ClientNodeUsage struct {
 
 // ClientUsageHistory is what the client editor's history button shows.
 type ClientUsageHistory struct {
-	Email        string                      `json:"email" example:"user1@example.com"`
-	LifetimeUp   int64                       `json:"lifetimeUp" example:"10737418240"`
-	LifetimeDown int64                       `json:"lifetimeDown" example:"21474836480"`
-	CurrentUp    int64                       `json:"currentUp" example:"1048576"`
-	CurrentDown  int64                       `json:"currentDown" example:"2097152"`
-	Windows      []model.ClientTrafficWindow `json:"windows"`
-	Nodes        []ClientNodeUsage           `json:"nodes"`
-	Changes      []model.ClientChangeLog     `json:"changes"`
+	DailyTraffic        []model.ClientDailyTraffic      `json:"dailyTraffic"`
+	SubscriptionFetches []model.ClientSubscriptionFetch `json:"subscriptionFetches"`
+	AccessLogs          []LogEntry                      `json:"accessLogs"`
+	Email               string                          `json:"email" example:"user1@example.com"`
+	LifetimeUp          int64                           `json:"lifetimeUp" example:"10737418240"`
+	LifetimeDown        int64                           `json:"lifetimeDown" example:"21474836480"`
+	CurrentUp           int64                           `json:"currentUp" example:"1048576"`
+	CurrentDown         int64                           `json:"currentDown" example:"2097152"`
+	Windows             []model.ClientTrafficWindow     `json:"windows"`
+	Nodes               []ClientNodeUsage               `json:"nodes"`
+	Changes             []model.ClientChangeLog         `json:"changes"`
 }
 
 func (s *ClientService) GetUsageHistory(email string) (*ClientUsageHistory, error) {
@@ -89,6 +93,20 @@ func (s *ClientService) GetUsageHistory(email string) (*ClientUsageHistory, erro
 	}
 	if err := db.Where("email = ?", email).Order("at DESC, id DESC").Find(&out.Changes).Error; err != nil {
 		return nil, err
+	}
+	out.DailyTraffic, err = ReadClientDailyTraffic([]string{email})
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Where("client_id IN (SELECT id FROM clients WHERE email = ?)", email).Order("id DESC").Limit(100).Find(&out.SubscriptionFetches).Error; err != nil {
+		return nil, err
+	}
+	if email != "" {
+		out.AccessLogs = (&ServerService{}).readXrayLogs("100", "", "", "", "", nil, nil, email)
+		slices.Reverse(out.AccessLogs)
+	}
+	if out.AccessLogs == nil {
+		out.AccessLogs = []LogEntry{}
 	}
 	return out, nil
 }
@@ -342,7 +360,23 @@ func (s *ClientService) ReapOrphanClientHistory() (int64, error) {
 			return reaped, err
 		}
 	}
-	return reaped, nil
+	err := runSerializedTx(func(tx *gorm.DB) error {
+		start := tx.NowFunc().UTC().AddDate(0, 0, 1-dailyTrafficDays).Format(time.DateOnly)
+		if err := tx.Where("day < ? OR NOT EXISTS (SELECT 1 FROM clients WHERE clients.id = client_daily_traffics.client_id)", start).
+			Delete(&model.ClientDailyTraffic{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("NOT EXISTS (SELECT 1 FROM clients WHERE clients.id = client_subscription_fetches.client_id)").
+			Delete(&model.ClientSubscriptionFetch{}).Error; err != nil {
+			return err
+		}
+		return tx.Where(`NOT EXISTS (SELECT 1 FROM inbounds WHERE inbounds.id = inbound_speed_limits.inbound_id)
+			OR (client_id <> 0 AND NOT EXISTS (SELECT 1 FROM client_inbounds ci
+				WHERE ci.inbound_id = inbound_speed_limits.inbound_id AND ci.client_id = inbound_speed_limits.client_id))`).
+			Delete(&model.InboundSpeedLimit{}).Error
+	})
+
+	return reaped, err
 }
 
 // orphanHistoryEmails walks the email index one distinct value at a time, so a run that

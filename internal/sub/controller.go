@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -484,6 +485,10 @@ func (a *SUBController) buildSubPageData(c *gin.Context) (PageData, bool) {
 	metadata := a.metadataForSubRequest(func() *SubService { return subReq }, subId, "")
 	page := subReq.BuildPageData(subId, hostHeader, traffic, lastOnline, subs, emails, subURL, subJsonURL, subClashURL, basePathStr, metadata.Title, metadata.SupportURL)
 	page.SubAnnounce = metadata.Announce
+	page.DailyTraffic, err = service.ReadClientDailyTraffic(dedupeEmails(emails))
+	if err != nil {
+		logger.Warning("Failed to read subscription daily traffic:", err)
+	}
 	return page, true
 }
 
@@ -581,7 +586,8 @@ func (a *SUBController) recordSubscriptionFetch(c *gin.Context) {
 	if c.Request == nil || c.Request.Method != http.MethodGet || c.Writer.Status() != http.StatusOK {
 		return
 	}
-	if err := a.subService.RecordSubscriptionFetch(c.Param("subid")); err != nil {
+	ip, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
+	if err := a.subService.RecordSubscriptionFetch(c.Param("subid"), sanitizeUserAgentForLog(c.Request.UserAgent()), ip); err != nil {
 		logger.Warning("Failed to record subscription fetch:", err)
 	}
 }
@@ -736,6 +742,7 @@ func (a *SUBController) subPageContext(page PageData) map[string]any {
 		"remained":      page.Remained,
 		"expire":        page.Expire,
 		"lastOnline":    page.LastOnline,
+		"dailyTraffic":  page.DailyTraffic,
 		"downloadByte":  page.DownloadByte,
 		"uploadByte":    page.UploadByte,
 		"totalByte":     page.TotalByte,
