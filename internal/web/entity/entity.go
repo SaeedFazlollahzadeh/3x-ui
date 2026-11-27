@@ -29,6 +29,11 @@ type PanelRestart struct {
 }
 
 type AllSetting struct {
+	AccessLogRetentionDays       int `json:"accessLogRetentionDays" form:"accessLogRetentionDays" validate:"min=0,max=36500"`
+	SubscriptionLogRetentionDays int `json:"subscriptionLogRetentionDays" form:"subscriptionLogRetentionDays" validate:"min=0,max=36500"`
+	AccessLogBackupDays          int `json:"accessLogBackupDays" form:"accessLogBackupDays" validate:"min=0,max=36500"`
+	SubscriptionLogBackupDays    int `json:"subscriptionLogBackupDays" form:"subscriptionLogBackupDays" validate:"min=0,max=36500"`
+
 	WebListen     string `json:"webListen" form:"webListen"`
 	WebDomain     string `json:"webDomain" form:"webDomain"`
 	WebPort       int    `json:"webPort" form:"webPort" validate:"gte=1,lte=65535"`

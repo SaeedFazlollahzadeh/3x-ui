@@ -15,7 +15,27 @@ export type ProcessState = z.infer<typeof ProcessStateSchema>;
 export const ProtocolSchema = z.string();
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
+export const AccessLogEntrySchema = z.object({
+  DateTime: z.string(),
+  Email: z.string(),
+  FromAddress: z.string(),
+  Inbound: z.string(),
+  ToAddress: z.string(),
+  offset: z.number().int(),
+  status: z.string(),
+});
+export type AccessLogEntry = z.infer<typeof AccessLogEntrySchema>;
+
+export const AccessLogPageSchema = z.object({
+  enabled: z.boolean(),
+  nextBefore: z.number().int(),
+  rows: z.array(z.lazy(() => AccessLogEntrySchema)),
+});
+export type AccessLogPage = z.infer<typeof AccessLogPageSchema>;
+
 export const AllSettingSchema = z.object({
+  accessLogBackupDays: z.number().int().min(0).max(36500),
+  accessLogRetentionDays: z.number().int().min(0).max(36500),
   datepicker: z.string(),
   discordAdminIds: z.string(),
   discordBotBackup: z.boolean(),
@@ -183,6 +203,8 @@ export const AllSettingSchema = z.object({
   subTrafficDepletedTemplate: z.string(),
   subURI: z.string(),
   subUpdates: z.number().int().min(0).max(525600),
+  subscriptionLogBackupDays: z.number().int().min(0).max(36500),
+  subscriptionLogRetentionDays: z.number().int().min(0).max(36500),
   tgBotAPIServer: z.string(),
   tgBotBackup: z.boolean(),
   tgBotChatId: z.string(),
@@ -220,6 +242,8 @@ export const AllSettingSchema = z.object({
 export type AllSetting = z.infer<typeof AllSettingSchema>;
 
 export const AllSettingViewSchema = z.object({
+  accessLogBackupDays: z.number().int().min(0).max(36500),
+  accessLogRetentionDays: z.number().int().min(0).max(36500),
   datepicker: z.string(),
   discordAdminIds: z.string(),
   discordBotBackup: z.boolean(),
@@ -397,6 +421,8 @@ export const AllSettingViewSchema = z.object({
   subTrafficDepletedTemplate: z.string(),
   subURI: z.string(),
   subUpdates: z.number().int().min(0).max(525600),
+  subscriptionLogBackupDays: z.number().int().min(0).max(36500),
+  subscriptionLogRetentionDays: z.number().int().min(0).max(36500),
   tgBotAPIServer: z.string(),
   tgBotBackup: z.boolean(),
   tgBotChatId: z.string(),
@@ -1374,6 +1400,21 @@ export const SubBalancerSchema = z.object({
   updatedAt: z.number().int(),
 });
 export type SubBalancer = z.infer<typeof SubBalancerSchema>;
+
+export const SubscriptionLogEntrySchema = z.object({
+  at: z.number().int(),
+  email: z.string(),
+  id: z.number().int(),
+  ip: z.string(),
+  userAgent: z.string(),
+});
+export type SubscriptionLogEntry = z.infer<typeof SubscriptionLogEntrySchema>;
+
+export const SubscriptionLogPageSchema = z.object({
+  nextBefore: z.number().int(),
+  rows: z.array(z.lazy(() => SubscriptionLogEntrySchema)),
+});
+export type SubscriptionLogPage = z.infer<typeof SubscriptionLogPageSchema>;
 
 export const TgBotCapabilitiesSchema = z.object({
   groupPrivacy: z.boolean(),

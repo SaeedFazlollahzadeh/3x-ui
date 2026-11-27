@@ -26,8 +26,78 @@
       }
     },
     "schemas": {
+      "AccessLogEntry": {
+        "properties": {
+          "DateTime": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "Email": {
+            "type": "string"
+          },
+          "FromAddress": {
+            "type": "string"
+          },
+          "Inbound": {
+            "type": "string"
+          },
+          "ToAddress": {
+            "type": "string"
+          },
+          "offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "DateTime",
+          "Email",
+          "FromAddress",
+          "Inbound",
+          "ToAddress",
+          "offset",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AccessLogPage": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AccessLogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "nextBefore",
+          "rows"
+        ],
+        "type": "object"
+      },
       "AllSetting": {
         "properties": {
+          "accessLogBackupDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "accessLogRetentionDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
           "datepicker": {
             "type": "string"
           },
@@ -572,6 +642,16 @@
             "minimum": 0,
             "type": "integer"
           },
+          "subscriptionLogBackupDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "subscriptionLogRetentionDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
           "tgBotAPIServer": {
             "type": "string"
           },
@@ -686,6 +766,8 @@
           }
         },
         "required": [
+          "accessLogBackupDays",
+          "accessLogRetentionDays",
           "datepicker",
           "discordAdminIds",
           "discordBotBackup",
@@ -853,6 +935,8 @@
           "subTrafficDepletedTemplate",
           "subURI",
           "subUpdates",
+          "subscriptionLogBackupDays",
+          "subscriptionLogRetentionDays",
           "tgBotAPIServer",
           "tgBotBackup",
           "tgBotChatId",
@@ -891,6 +975,16 @@
       },
       "AllSettingView": {
         "properties": {
+          "accessLogBackupDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "accessLogRetentionDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
           "datepicker": {
             "type": "string"
           },
@@ -1465,6 +1559,16 @@
             "minimum": 0,
             "type": "integer"
           },
+          "subscriptionLogBackupDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "subscriptionLogRetentionDays": {
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
           "tgBotAPIServer": {
             "type": "string"
           },
@@ -1579,6 +1683,8 @@
           }
         },
         "required": [
+          "accessLogBackupDays",
+          "accessLogRetentionDays",
           "datepicker",
           "discordAdminIds",
           "discordBotBackup",
@@ -1756,6 +1862,8 @@
           "subTrafficDepletedTemplate",
           "subURI",
           "subUpdates",
+          "subscriptionLogBackupDays",
+          "subscriptionLogRetentionDays",
           "tgBotAPIServer",
           "tgBotBackup",
           "tgBotChatId",
@@ -5732,6 +5840,54 @@
         ],
         "type": "object"
       },
+      "SubscriptionLogEntry": {
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "userAgent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "email",
+          "id",
+          "ip",
+          "userAgent"
+        ],
+        "type": "object"
+      },
+      "SubscriptionLogPage": {
+        "properties": {
+          "nextBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionLogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "nextBefore",
+          "rows"
+        ],
+        "type": "object"
+      },
       "TgBotCapabilities": {
         "description": "TgBotCapabilities is the browser-safe shape of the bot's own capabilities.",
         "properties": {
@@ -5976,6 +6132,10 @@
     {
       "name": "Inbounds",
       "description": "Manage inbound configurations and their clients. All endpoints live under /panel/api/inbounds and require a logged-in session or Bearer token. Link-generating endpoints honour forwarded headers only when the request comes from a configured trusted proxy."
+    },
+    {
+      "name": "Activity logs",
+      "description": "Paginated local Xray access logs and subscription download history."
     },
     {
       "name": "Server",
@@ -7506,6 +7666,242 @@
                 "example": {
                   "success": true,
                   "msg": "Inbound updated"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/activity/access": {
+      "get": {
+        "tags": [
+          "Activity logs"
+        ],
+        "summary": "List connection events in the retained local Xray access log, newest first.",
+        "operationId": "get_panel_api_activity_access",
+        "parameters": [
+          {
+            "name": "client",
+            "in": "query",
+            "required": false,
+            "description": "Client email substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inbound",
+            "in": "query",
+            "required": false,
+            "description": "Logged inbound tag substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Destination or source address substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "accepted or rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive start timestamp in milliseconds.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive end timestamp in milliseconds.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "nextBefore from the previous response.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size from 1 to 100. Default 50.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/AccessLogPage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "enabled": false,
+                    "nextBefore": 0,
+                    "rows": [
+                      {
+                        "DateTime": "2025-01-01T00:00:00Z",
+                        "Email": "",
+                        "FromAddress": "",
+                        "Inbound": "",
+                        "ToAddress": "",
+                        "offset": 0,
+                        "status": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/panel/api/activity/subscription": {
+      "get": {
+        "tags": [
+          "Activity logs"
+        ],
+        "summary": "List recorded successful subscription downloads, newest first.",
+        "operationId": "get_panel_api_activity_subscription",
+        "parameters": [
+          {
+            "name": "client",
+            "in": "query",
+            "required": false,
+            "description": "Client email substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inbound",
+            "in": "query",
+            "required": false,
+            "description": "Tag or remark substring of a current client attachment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "User agent or request IP substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive start timestamp in milliseconds.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive end timestamp in milliseconds.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "nextBefore from the previous response.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size from 1 to 100. Default 50.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {
+                      "$ref": "#/components/schemas/SubscriptionLogPage"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "obj": {
+                    "nextBefore": 0,
+                    "rows": [
+                      {
+                        "at": 0,
+                        "email": "",
+                        "id": 0,
+                        "ip": "",
+                        "userAgent": ""
+                      }
+                    ]
+                  }
                 }
               }
             }

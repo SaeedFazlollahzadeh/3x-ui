@@ -1348,8 +1348,11 @@ func (s *ServerService) GetLogs(count string, level string, syslog string) []str
 // the log verbatim) and may be truncated, so every positional lookup is length
 // guarded: a malformed line yields a partial entry rather than panicking.
 func parseAccessLogFields(line string) LogEntry {
+	return parseAccessLogTokens(strings.Fields(line))
+}
+
+func parseAccessLogTokens(parts []string) LogEntry {
 	var entry LogEntry
-	parts := strings.Fields(line)
 
 	for i, part := range parts {
 
@@ -1583,59 +1586,44 @@ func (s *ServerService) readXrayLogs(
 		return nil
 	}
 
-	file, err := os.Open(pathToAccessLog)
-	if err != nil {
+	if pathToAccessLog == "" || pathToAccessLog == "none" {
 		return nil
 	}
-	defer file.Close()
-
-	reader := bufio.NewReaderSize(file, maxAccessLogLineBytes)
-
-	for {
-		line, err := readAccessLogLine(reader)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil
-		}
+	err = scanAccessLogs(context.Background(), pathToAccessLog, 0, func(line string, _ int64) {
 		line = strings.TrimSpace(line)
 
 		if line == "" || strings.Contains(line, "api -> api") {
 			// skipping empty lines and api calls
-			continue
+			return
 		}
 
 		if filter != "" && !strings.Contains(line, filter) {
 			// applying filter if it's not empty
-			continue
+			return
 		}
 
 		entry := parseAccessLogFields(line)
 
 		if email != "" {
 			if !strings.EqualFold(entry.Email, email) || entry.ToAddress == "" || entry.DateTime.IsZero() {
-				continue
+				return
 			}
-			// HTTP proxy log entries can include a full URL with sensitive paths or query strings.
-			if target, err := url.Parse(entry.ToAddress); err == nil && target.Host != "" {
-				entry.ToAddress = target.Host
-			}
+			entry.ToAddress = accessLogDestination(entry.ToAddress)
 		}
 
 		if logEntryContains(line, freedoms) {
 			if showDirect == "false" {
-				continue
+				return
 			}
 			entry.Event = Direct
 		} else if logEntryContains(line, blackholes) {
 			if showBlocked == "false" {
-				continue
+				return
 			}
 			entry.Event = Blocked
 		} else {
 			if showProxy == "false" {
-				continue
+				return
 			}
 			entry.Event = Proxied
 		}
@@ -1646,6 +1634,9 @@ func (s *ServerService) readXrayLogs(
 		if len(entries) > countInt {
 			entries = entries[1:]
 		}
+	})
+	if err != nil {
+		return nil
 	}
 
 	return entries

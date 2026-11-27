@@ -5,7 +5,25 @@ export type OnlineAPISupport = number;
 export type ProcessState = string;
 export type Protocol = string;
 
+export interface AccessLogEntry {
+  DateTime: string;
+  Email: string;
+  FromAddress: string;
+  Inbound: string;
+  ToAddress: string;
+  offset: number;
+  status: string;
+}
+
+export interface AccessLogPage {
+  enabled: boolean;
+  nextBefore: number;
+  rows: AccessLogEntry[];
+}
+
 export interface AllSetting {
+  accessLogBackupDays: number;
+  accessLogRetentionDays: number;
   datepicker: string;
   discordAdminIds: string;
   discordBotBackup: boolean;
@@ -173,6 +191,8 @@ export interface AllSetting {
   subTrafficDepletedTemplate: string;
   subURI: string;
   subUpdates: number;
+  subscriptionLogBackupDays: number;
+  subscriptionLogRetentionDays: number;
   tgBotAPIServer: string;
   tgBotBackup: boolean;
   tgBotChatId: string;
@@ -209,6 +229,8 @@ export interface AllSetting {
 }
 
 export interface AllSettingView {
+  accessLogBackupDays: number;
+  accessLogRetentionDays: number;
   datepicker: string;
   discordAdminIds: string;
   discordBotBackup: boolean;
@@ -386,6 +408,8 @@ export interface AllSettingView {
   subTrafficDepletedTemplate: string;
   subURI: string;
   subUpdates: number;
+  subscriptionLogBackupDays: number;
+  subscriptionLogRetentionDays: number;
   tgBotAPIServer: string;
   tgBotBackup: boolean;
   tgBotChatId: string;
@@ -1292,6 +1316,19 @@ export interface SubBalancer {
   sortOrder: number;
   strategy: string;
   updatedAt: number;
+}
+
+export interface SubscriptionLogEntry {
+  at: number;
+  email: string;
+  id: number;
+  ip: string;
+  userAgent: string;
+}
+
+export interface SubscriptionLogPage {
+  nextBefore: number;
+  rows: SubscriptionLogEntry[];
 }
 
 export interface TgBotCapabilities {

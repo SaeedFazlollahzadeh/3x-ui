@@ -152,6 +152,11 @@ func getBaseDir() string {
 	return exeDir
 }
 
+// GetActivityBackupFolder returns a private directory alongside the panel binary.
+func GetActivityBackupFolder() string {
+	return filepath.Join(getBaseDir(), "backup")
+}
+
 // GetDBFolderPath returns the path to the database folder based on environment variables or platform defaults.
 func GetDBFolderPath() string {
 	dbFolderPath := os.Getenv("XUI_DB_FOLDER")

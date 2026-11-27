@@ -508,20 +508,9 @@ func (s *SubService) RecordSubscriptionFetch(subID, userAgent, ip string) error 
 				Update("last_sub_fetch", now).Error; err != nil {
 				return err
 			}
-			row := model.ClientSubscriptionFetch{ClientID: client.Id, At: now, UserAgent: userAgent, IP: ip}
+			row := model.ClientSubscriptionFetch{ClientID: client.Id, Email: client.Email, At: now, UserAgent: userAgent, IP: ip}
 			if err := tx.Create(&row).Error; err != nil {
 				return err
-			}
-			var cutoff int64
-			result := tx.Model(&model.ClientSubscriptionFetch{}).Select("id").Where("client_id = ?", client.Id).
-				Order("id DESC").Offset(99).Limit(1).Scan(&cutoff)
-			if result.Error != nil {
-				return result.Error
-			}
-			if cutoff > 0 {
-				if err := tx.Where("client_id = ? AND id < ?", client.Id, cutoff).Delete(&model.ClientSubscriptionFetch{}).Error; err != nil {
-					return err
-				}
 			}
 		}
 		return nil

@@ -64,7 +64,7 @@ func TestEnsureAPIServices(t *testing.T) {
 	}
 
 	// complete api block is returned unchanged (no marshal churn)
-	full := json_util.RawMessage(`{"services":["HandlerService","StatsService","RoutingService"],"tag":"api"}`)
+	full := json_util.RawMessage(`{"services":["HandlerService","StatsService","RoutingService","LoggerService"],"tag":"api"}`)
 	if got := ensureAPIServices(full); string(got) != string(full) {
 		t.Fatalf("complete api block must pass through untouched, got %s", got)
 	}

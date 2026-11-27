@@ -219,6 +219,8 @@ func (a *APIController) initRouter(g *gin.RouterGroup, router http.Handler) {
 	api.Use(middleware.CSRFMiddleware(getRemoteIp))
 
 	api.GET("/openapi.json", ServeOpenAPISpec)
+	api.GET("/activity/access", panelAccessLogs)
+	api.GET("/activity/subscription", panelSubscriptionLogs)
 
 	// Inbounds API
 	inbounds := api.Group("/inbounds")

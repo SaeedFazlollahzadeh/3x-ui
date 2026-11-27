@@ -114,6 +114,8 @@
     "dashboard": "Overview",
     "inbounds": "Inbounds",
     "clients": "Clients",
+    "clientAccessLogs": "Access logs",
+    "subscriptionLoginLogs": "Subscription login logs",
     "groups": "Groups",
     "nodes": "Nodes",
     "hosts": "Hosts",
@@ -851,6 +853,26 @@
         }
       }
     },
+    "activityLogs": {
+      "accessHelp": "Connection events retained from the local Xray access log. Set the retention period under Panel Settings → General → Activity logs.",
+      "subscriptionHelp": "Successful subscription downloads. Inbound filtering uses the client’s current attachments.",
+      "client": "Client email",
+      "inboundTag": "Inbound tag",
+      "inboundMembership": "Attached inbound",
+      "destinationOrIp": "Destination or source address",
+      "deviceOrIp": "App, device or IP",
+      "from": "From date",
+      "to": "Through date",
+      "invalidDates": "Choose an end date on or after the start date.",
+      "loadError": "Could not load the logs.",
+      "noMatches": "No matching logs.",
+      "sourceAddress": "Source address",
+      "status": "Connection status",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "newer": "Newer",
+      "older": "Older"
+    },
     "clients": {
       "tabBasics": "Basics",
       "tabCredentials": "Credentials",
@@ -1468,6 +1490,13 @@
       "pinFetchFailed": "Could not fetch the certificate"
     },
     "settings": {
+      "activityLogSettings": "Activity logs",
+      "accessLogRetentionDays": "Keep access logs (days)",
+      "subscriptionLogRetentionDays": "Keep subscription login logs (days)",
+      "accessLogBackupDays": "Back up access logs (days)",
+      "subscriptionLogBackupDays": "Back up subscription login logs (days)",
+      "activityLogRetentionHelp": "Older entries are removed hourly. Enter 0 to keep all entries.",
+      "activityLogBackupHelp": "Refresh the rolling backup hourly in the backup directory next to the panel binary, usually /usr/local/x-ui/backup/. Enter 0 to disable future backups.",
       "defaultTag": "Default",
       "title": "Panel Settings",
       "save": "Save",

@@ -1179,8 +1179,8 @@ func mergeSubscriptionOutbounds(cfg *xray.Config, prepend, appendList []any) {
 // ensureAPIServices guarantees the gRPC services the panel depends on are
 // listed in the generated config's api block: HandlerService and StatsService
 // have always been required for inbound/user management and traffic polling,
-// and RoutingService enables hot routing reload on templates saved before it
-// was added to the default template. The stored template itself is not
+// RoutingService enables hot routing reload, and LoggerService reopens files
+// when access logs rotate. The stored template itself is not
 // modified — only the generated runtime config.
 func ensureAPIServices(api json_util.RawMessage) json_util.RawMessage {
 	if len(api) == 0 {
@@ -1200,7 +1200,7 @@ func ensureAPIServices(api json_util.RawMessage) json_util.RawMessage {
 		}
 	}
 	added := false
-	for _, name := range []string{"HandlerService", "StatsService", "RoutingService"} {
+	for _, name := range []string{"HandlerService", "StatsService", "RoutingService", "LoggerService"} {
 		if !have[name] {
 			services = append(services, name)
 			added = true

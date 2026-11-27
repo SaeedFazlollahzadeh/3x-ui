@@ -366,10 +366,6 @@ func (s *ClientService) ReapOrphanClientHistory() (int64, error) {
 			Delete(&model.ClientDailyTraffic{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("NOT EXISTS (SELECT 1 FROM clients WHERE clients.id = client_subscription_fetches.client_id)").
-			Delete(&model.ClientSubscriptionFetch{}).Error; err != nil {
-			return err
-		}
 		return tx.Where(`NOT EXISTS (SELECT 1 FROM inbounds WHERE inbounds.id = inbound_speed_limits.inbound_id)
 			OR (client_id <> 0 AND NOT EXISTS (SELECT 1 FROM client_inbounds ci
 				WHERE ci.inbound_id = inbound_speed_limits.inbound_id AND ci.client_id = inbound_speed_limits.client_id))`).

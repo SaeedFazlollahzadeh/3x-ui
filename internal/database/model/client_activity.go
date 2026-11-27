@@ -12,7 +12,8 @@ type ClientDailyTraffic struct {
 type ClientSubscriptionFetch struct {
 	ID        int64  `gorm:"primaryKey;index:idx_fetch_client_id,priority:2" json:"id"`
 	ClientID  int    `gorm:"index:idx_fetch_client_id,priority:1" json:"-"`
-	At        int64  `json:"at"`
+	Email     string `gorm:"not null;default:''" json:"-"`
+	At        int64  `gorm:"index" json:"at"`
 	UserAgent string `json:"userAgent"`
 	IP        string `json:"ip"`
 }

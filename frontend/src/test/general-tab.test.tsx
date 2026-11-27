@@ -39,4 +39,15 @@ describe('GeneralTab', () => {
 
     expect(updateSetting).toHaveBeenCalledWith({ pageSize: 0 });
   });
+  it('saves separate retention and backup day counts', async () => {
+    const updateSetting = vi.fn();
+    await renderGeneralTab(updateSetting);
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity logs' }));
+    fireEvent.change(screen.getByLabelText('Keep access logs (days)'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Back up subscription login logs (days)'), {
+      target: { value: '30' },
+    });
+    expect(updateSetting).toHaveBeenCalledWith({ accessLogRetentionDays: 7 });
+    expect(updateSetting).toHaveBeenCalledWith({ subscriptionLogBackupDays: 30 });
+  });
 });

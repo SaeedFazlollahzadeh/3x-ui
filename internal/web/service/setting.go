@@ -285,6 +285,11 @@ var defaultValueMap = map[string]string{
 	"discordMemory":        "80",
 	"discordLang":          "en-US",
 	"discordEnabledEvents": "login.attempt,cpu.high",
+
+	"accessLogRetentionDays":       "0",
+	"subscriptionLogRetentionDays": "0",
+	"accessLogBackupDays":          "0",
+	"subscriptionLogBackupDays":    "0",
 }
 
 // SettingService provides business logic for application settings management.

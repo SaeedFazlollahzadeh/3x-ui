@@ -377,6 +377,9 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	// check client ips from log file every day
 	_, _ = s.cron.AddJob("@daily", job.NewClearLogsJob())
 	_, _ = s.cron.AddJob(cadenceXrayLogPrune, job.NewPruneXrayLogsJob())
+	maintainActivityLogs := func() { job.RunActivityLogMaintenance(s.ctx) }
+	_, _ = s.cron.AddFunc("@hourly", maintainActivityLogs)
+	common.GoRecover("activity-log-maintenance", maintainActivityLogs)
 	_, _ = s.cron.AddJob("@hourly", job.NewWarpIpJob())
 	_, _ = s.cron.AddJob(cadenceRealityWatch, job.NewRealityWatchJob())
 

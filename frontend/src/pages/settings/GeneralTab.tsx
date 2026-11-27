@@ -5,6 +5,7 @@ import {
   ApartmentOutlined,
   BellOutlined,
   ClockCircleOutlined,
+  FileTextOutlined,
   GlobalOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
@@ -411,6 +412,43 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
                   options={langOptions}
                 />
               </SettingListItem>
+            </>
+          ),
+        },
+        {
+          key: 'activity-logs',
+          label: catTabLabel(
+            <FileTextOutlined aria-hidden />,
+            t('pages.settings.activityLogSettings'),
+            isMobile,
+          ),
+          children: (
+            <>
+              {(
+                [
+                  ['accessLogRetentionDays', 'activityLogRetentionHelp'],
+                  ['subscriptionLogRetentionDays', 'activityLogRetentionHelp'],
+                  ['accessLogBackupDays', 'activityLogBackupHelp'],
+                  ['subscriptionLogBackupDays', 'activityLogBackupHelp'],
+                ] as const
+              ).map(([key, help]) => (
+                <SettingListItem
+                  key={key}
+                  paddings="small"
+                  title={t(`pages.settings.${key}`)}
+                  description={t(`pages.settings.${help}`)}
+                >
+                  <InputNumber
+                    aria-label={t(`pages.settings.${key}`)}
+                    value={allSetting[key]}
+                    min={0}
+                    max={36500}
+                    precision={0}
+                    style={{ width: '100%' }}
+                    onChange={onNumber((value) => updateSetting({ [key]: value }))}
+                  />
+                </SettingListItem>
+              ))}
             </>
           ),
         },

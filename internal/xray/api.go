@@ -23,6 +23,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
 	wgutil "github.com/mhsanaei/3x-ui/v3/internal/util/wireguard"
 
+	loggerService "github.com/xtls/xray-core/app/log/command"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/proxyman/command"
 	"github.com/xtls/xray-core/app/router"
@@ -137,6 +138,12 @@ func (x *XrayAPI) Init(apiPort int) error {
 	x.RoutingServiceClient = &rsClient
 
 	return nil
+}
+
+// RestartLogger reopens the configured Xray log files.
+func (x *XrayAPI) RestartLogger(ctx context.Context) error {
+	_, err := loggerService.NewLoggerServiceClient(x.grpcClient).RestartLogger(ctx, &loggerService.RestartLoggerRequest{})
+	return err
 }
 
 // Close closes the gRPC connection and resets the XrayAPI client state.

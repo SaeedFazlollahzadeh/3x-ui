@@ -25,6 +25,10 @@ export class AllSetting {
   panelOutbound = '';
   networkTrafficMode: NetworkTrafficMode = 'legacy';
   networkTrafficInterface = '';
+  accessLogRetentionDays = 0;
+  subscriptionLogRetentionDays = 0;
+  accessLogBackupDays = 0;
+  subscriptionLogBackupDays = 0;
   pageSize = 25;
   expireDiff = 0;
   trafficDiff = 0;

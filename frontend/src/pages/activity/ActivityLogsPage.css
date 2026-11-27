@@ -1,0 +1,22 @@
+.activity-log-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  column-gap: 12px;
+  align-items: end;
+}
+
+.activity-log-filters .ant-picker {
+  width: 100%;
+}
+
+.activity-log-actions {
+  margin-block-end: 24px;
+}
+
+.activity-logs-page .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+
+.activity-log-pagination {
+  margin-block-start: 16px;
+}

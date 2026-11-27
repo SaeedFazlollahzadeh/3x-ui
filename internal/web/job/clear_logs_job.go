@@ -16,8 +16,7 @@ var maxXrayLogBytes = defaultMaxXrayLogBytes
 // ClearLogsJob clears old log files to prevent disk space issues.
 type ClearLogsJob struct{}
 
-// PruneXrayLogsJob truncates oversized Xray access and error logs.
-// PruneXrayLogsJob truncates the Xray access and error logs once either exceeds maxXrayLogBytes.
+// PruneXrayLogsJob truncates the Xray error log when it exceeds maxXrayLogBytes.
 type PruneXrayLogsJob struct{}
 
 // NewClearLogsJob creates a new log cleanup job instance.
@@ -89,17 +88,24 @@ func (j *ClearLogsJob) Run() {
 		}
 	}
 
-	wipeXrayLogs()
+	truncateXrayLog(independentXrayErrorLogPath, 0)
 }
 
 func (j *PruneXrayLogsJob) Run() {
-	truncateXrayLog(xray.GetAccessLogPath, maxXrayLogBytes)
-	truncateXrayLog(xray.GetErrorLogPath, maxXrayLogBytes)
+	truncateXrayLog(independentXrayErrorLogPath, maxXrayLogBytes)
 }
 
-func wipeXrayLogs() {
-	truncateXrayLog(xray.GetAccessLogPath, 0)
-	truncateXrayLog(xray.GetErrorLogPath, 0)
+// A shared access/error path must follow the access-log retention policy.
+func independentXrayErrorLogPath() (string, error) {
+	path, err := xray.GetErrorLogPath()
+	if err != nil {
+		return "", err
+	}
+	access, err := xray.GetAccessLogPath()
+	if err != nil || filepath.Clean(path) == filepath.Clean(access) {
+		return "", err
+	}
+	return path, nil
 }
 
 func truncateXrayLog(pathFn func() (string, error), maxBytes int64) {
