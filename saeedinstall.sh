@@ -88,16 +88,22 @@ version_at_least() {
         [[ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
 }
 
+download_file() {
+    local url="$1" output="$2"
+    echo "Downloading $url" >&2
+    curl -fsSL --retry 3 "$url" -o "$output" || fail "Download failed: $url"
+}
+
 download_archive() {
     local url="$1" archive="$2" checksum="$3"
     [[ "$checksum" =~ ^[[:xdigit:]]{64}$ ]] || fail "No published SHA-256 checksum for $archive."
-    curl -fsSL --retry 3 "$url" -o "$stage/$archive"
+    download_file "$url" "$stage/$archive"
     (cd "$stage" && printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c -)
 }
 
 prepare_build_tools() {
     local dependency go_min go_installed go_arch node_major node_installed npm_installed
-    local node_arch archive checksum node_url
+    local node_arch archive checksum node_url node_release
     for dependency in git curl tar gzip xz sha256sum; do
         if ! command -v "$dependency" >/dev/null; then
             install_build_packages
@@ -117,7 +123,7 @@ prepare_build_tools() {
         go_arch="$platform"
         case "$platform" in armv6|armv7) go_arch=armv6l ;; esac
         archive="go$go_min.linux-$go_arch.tar.gz"
-        curl -fsSL --retry 3 'https://go.dev/dl/?mode=json&include=all' -o "$stage/go-releases.json"
+        download_file 'https://go.dev/dl/?mode=json&include=all' "$stage/go-releases.json"
         checksum="$(awk -F '"' -v file="$archive" '
             $2 == "filename" {match_file = ($4 == file)}
             match_file && $2 == "sha256" {print $4; exit}
@@ -138,13 +144,15 @@ prepare_build_tools() {
             *) fail "Install Node.js $node_major or newer and npm 11 or newer for $platform before building." ;;
         esac
         node_url="https://nodejs.org/dist/latest-v$node_major.x"
-        curl -fsSL --retry 3 "$node_url/SHASUMS256.txt" -o "$stage/node-checksums"
+        download_file "$node_url/SHASUMS256.txt" "$stage/node-checksums"
         read -r checksum archive < <(awk -v suffix="-linux-$node_arch.tar.xz" '
             substr($2, length($2) - length(suffix) + 1) == suffix {print $1, $2; exit}
         ' "$stage/node-checksums") || fail "No official Node.js $node_major archive for $platform. Install Node.js and npm on this host before building."
         [[ "$archive" =~ ^node-v[0-9]+[.][0-9]+[.][0-9]+-linux-[a-z0-9]+[.]tar[.]xz$ ]] ||
             fail "Unexpected Node.js archive name."
-        download_archive "$node_url/$archive" "$archive" "$checksum"
+        node_release="${archive#node-}"
+        node_release="${node_release%%-linux-*}"
+        download_archive "https://nodejs.org/dist/$node_release/$archive" "$archive" "$checksum"
         tar -xJf "$stage/$archive" -C "$stage"
         export PATH="$stage/${archive%.tar.xz}/bin:$PATH"
     fi
