@@ -44,3 +44,24 @@ docker-compose.override.yml
 
 # Ignore .env (Environment Variables) file
 .env
+
+# Track the prebuilt saeedxui bundle and keep runtime data private.
+/saeedxui/**
+!/saeedxui/usr/
+!/saeedxui/usr/bin/
+!/saeedxui/usr/bin/x-ui
+!/saeedxui/usr/local/
+!/saeedxui/usr/local/x-ui/
+!/saeedxui/usr/local/x-ui/x-ui
+!/saeedxui/usr/local/x-ui/x-ui.sh
+!/saeedxui/usr/local/x-ui/x-ui.service.arch
+!/saeedxui/usr/local/x-ui/x-ui.service.debian
+!/saeedxui/usr/local/x-ui/x-ui.service.rhel
+!/saeedxui/usr/local/x-ui/bin/
+!/saeedxui/usr/local/x-ui/bin/xray-linux-386
+!/saeedxui/usr/local/x-ui/bin/xray-linux-amd64
+!/saeedxui/usr/local/x-ui/bin/xray-linux-arm32
+!/saeedxui/usr/local/x-ui/bin/xray-linux-arm64
+!/saeedxui/usr/local/x-ui/bin/xray-linux-ppc64le
+!/saeedxui/usr/local/x-ui/bin/xray-linux-riscv64
+!/saeedxui/usr/local/x-ui/bin/xray-linux-s390x
