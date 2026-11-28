@@ -37,7 +37,7 @@ export interface ClientUsageHistoryInfo {
   changes: ClientChangeInfo[];
   dailyTraffic: DailyTraffic[];
   subscriptionFetches: { id: number; at: number; userAgent: string; ip: string }[];
-  accessLogs: { DateTime: string; Inbound: string; ToAddress: string }[];
+  accessLogs: { DateTime: string; Inbound: string; InboundName: string; ToAddress: string }[];
 }
 
 const num = (value: unknown, fallback = 0): number =>
@@ -72,6 +72,7 @@ export function normalizeClientUsageHistory(raw: unknown): ClientUsageHistoryInf
     accessLogs: rows(obj.accessLogs).map((a) => ({
       DateTime: String(a.DateTime ?? ''),
       Inbound: String(a.Inbound ?? ''),
+      InboundName: String(a.InboundName ?? ''),
       ToAddress: String(a.ToAddress ?? ''),
     })),
     windows: rows(obj.windows).map((w) => ({

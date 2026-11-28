@@ -166,5 +166,8 @@ func rotateAccessLog(ctx context.Context, path string, now time.Time) error {
 			return fmt.Errorf("reopen Xray logs: %w", err)
 		}
 	}
-	return os.Rename(pending, destination)
+	if err := os.Rename(pending, destination); err != nil {
+		return err
+	}
+	return annotateAccessLog(ctx, destination, readAccessLogNames(ctx))
 }

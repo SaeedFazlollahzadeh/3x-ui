@@ -93,6 +93,8 @@ type AccessLogEntry struct {
 	DateTime    time.Time `json:"DateTime"`
 	Email       string    `json:"Email"`
 	Inbound     string    `json:"Inbound"`
+	ClientName  string    `json:"ClientName"`
+	InboundName string    `json:"InboundName"`
 	FromAddress string    `json:"FromAddress"`
 	ToAddress   string    `json:"ToAddress"`
 }
@@ -126,8 +128,10 @@ func ReadAccessLogPage(ctx context.Context, filter ActivityLogFilter) (AccessLog
 	limit := filter.pageSize()
 	window := make([]AccessLogEntry, limit+1)
 	matches := 0
+	names := readAccessLogNames(ctx)
 	client, inbound, search := strings.ToLower(filter.Client), strings.ToLower(filter.Inbound), strings.ToLower(filter.Search)
 	err = scanAccessLogs(ctx, path, filter.Before, func(line string, offset int64) {
+		line, recorded := splitAccessLogNames(line)
 		if strings.Contains(line, "api -> api") {
 			return
 		}
@@ -140,6 +144,7 @@ func ReadAccessLogPage(ctx context.Context, filter ActivityLogFilter) (AccessLog
 			return
 		}
 		entry := parseAccessLogTokens(fields)
+		labels := names.labels(entry, recorded)
 		entry.FromAddress = strings.TrimLeft(fields[3], "/")
 		entry.ToAddress = ""
 		if len(fields) > 5 && fields[5] != "<nil>" &&
@@ -149,8 +154,8 @@ func ReadAccessLogPage(ctx context.Context, filter ActivityLogFilter) (AccessLog
 		at := entry.DateTime.UnixMilli()
 		if entry.DateTime.IsZero() ||
 			(filter.From > 0 && at < filter.From) || (filter.To > 0 && at >= filter.To) ||
-			!strings.Contains(strings.ToLower(entry.Email), client) ||
-			!strings.Contains(strings.ToLower(entry.Inbound), inbound) {
+			(!strings.Contains(strings.ToLower(entry.Email), client) && !strings.Contains(strings.ToLower(labels.ClientName), client)) ||
+			(!strings.Contains(strings.ToLower(entry.Inbound), inbound) && !strings.Contains(strings.ToLower(labels.InboundName), inbound)) {
 			return
 		}
 		entry.ToAddress = accessLogDestination(entry.ToAddress)
@@ -162,6 +167,7 @@ func ReadAccessLogPage(ctx context.Context, filter ActivityLogFilter) (AccessLog
 		window[matches%len(window)] = AccessLogEntry{
 			Offset: offset, Status: status, DateTime: entry.DateTime, Email: entry.Email,
 			Inbound: entry.Inbound, FromAddress: entry.FromAddress, ToAddress: entry.ToAddress,
+			ClientName: labels.ClientName, InboundName: labels.InboundName,
 		}
 		matches++
 	})

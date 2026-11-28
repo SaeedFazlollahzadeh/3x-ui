@@ -405,6 +405,8 @@ type LogEntry struct {
 	Inbound     string    `json:"Inbound" example:"inbound-443"`
 	Outbound    string    `json:"Outbound" example:"direct"`
 	Email       string    `json:"Email" example:"alice@example.com"`
+	ClientName  string    `json:"ClientName,omitempty"`
+	InboundName string    `json:"InboundName,omitempty"`
 	Event       int       `json:"Event" example:"0"`
 }
 
@@ -1589,8 +1591,13 @@ func (s *ServerService) readXrayLogs(
 	if pathToAccessLog == "" || pathToAccessLog == "none" {
 		return nil
 	}
+	var names accessLogNames
+	if email != "" {
+		names = readAccessLogNames(context.Background())
+	}
 	err = scanAccessLogs(context.Background(), pathToAccessLog, 0, func(line string, _ int64) {
 		line = strings.TrimSpace(line)
+		line, recorded := splitAccessLogNames(line)
 
 		if line == "" || strings.Contains(line, "api -> api") {
 			// skipping empty lines and api calls
@@ -1609,6 +1616,8 @@ func (s *ServerService) readXrayLogs(
 				return
 			}
 			entry.ToAddress = accessLogDestination(entry.ToAddress)
+			labels := names.labels(entry, recorded)
+			entry.ClientName, entry.InboundName = labels.ClientName, labels.InboundName
 		}
 
 		if logEntryContains(line, freedoms) {

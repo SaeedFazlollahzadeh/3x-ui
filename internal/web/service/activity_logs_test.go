@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,5 +71,47 @@ func TestActivitySubscriptionLogFiltersAndPagination(t *testing.T) {
 	page, err = ReadSubscriptionLogPage(context.Background(), filter)
 	if err != nil || len(page.Rows) != 0 {
 		t.Fatalf("unattached inbound page = %+v, error = %v", page, err)
+	}
+}
+
+func TestActivityAccessLogsShowReadableNames(t *testing.T) {
+	const email = "random-client-id"
+	inbound := seedUsageHistoryClient(t, &InboundService{}, email, "b49e5c40-4586-4768-9482-72407f1c4c82", 0, 0)
+	db := database.GetDB()
+	if err := db.Model(&model.ClientRecord{}).Where("email = ?", email).Update("comment", "Alice’s phone").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&model.Inbound{}).Where("id = ?", inbound.Id).Update("remark", "Tehran VLESS").Error; err != nil {
+		t.Fatal(err)
+	}
+	writeAccessLog(t, 1, func(int) string {
+		return "2026/11/27 17:37:42.909381 from 192.0.2.8:1234 accepted tcp:example.com:443 [" + inbound.Tag + " >> direct] email: " + email
+	})
+
+	ctx := context.Background()
+	filter := ActivityLogFilter{Client: "phone", Inbound: "tehran"}
+	page, err := ReadAccessLogPage(ctx, filter)
+	if err != nil || len(page.Rows) != 1 || page.Rows[0].ClientName != "Alice’s phone" ||
+		page.Rows[0].InboundName != "Tehran VLESS" || page.Rows[0].Email != email || page.Rows[0].Inbound != inbound.Tag {
+		t.Fatalf("resolved access event: %+v, %v", page, err)
+	}
+	backupDir := t.TempDir()
+	if err := maintainAccessLogs(ctx, time.Date(2026, 11, 28, 12, 0, 0, 0, time.Local), backupDir, 0, 7); err != nil {
+		t.Fatal(err)
+	}
+	backups, err := accessSegments(filepath.Join(backupDir, "access-logs"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("access backups: %v, %v", backups, err)
+	}
+	data, err := os.ReadFile(backups[0])
+	if err != nil || !strings.Contains(string(data), `"client_name":"Alice’s phone","inbound_name":"Tehran VLESS"`) {
+		t.Fatalf("backup display names: %q, %v", data, err)
+	}
+	if err := db.Model(&model.ClientRecord{}).Where("email = ?", email).Update("comment", "Renamed").Error; err != nil {
+		t.Fatal(err)
+	}
+	page, err = ReadAccessLogPage(ctx, filter)
+	if err != nil || len(page.Rows) != 1 || page.Rows[0].ClientName != "Alice’s phone" {
+		t.Fatalf("archived access event: %+v, %v", page, err)
 	}
 }

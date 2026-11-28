@@ -28,6 +28,9 @@
     "schemas": {
       "AccessLogEntry": {
         "properties": {
+          "ClientName": {
+            "type": "string"
+          },
           "DateTime": {
             "format": "date-time",
             "type": "string"
@@ -39,6 +42,9 @@
             "type": "string"
           },
           "Inbound": {
+            "type": "string"
+          },
+          "InboundName": {
             "type": "string"
           },
           "ToAddress": {
@@ -53,10 +59,12 @@
           }
         },
         "required": [
+          "ClientName",
           "DateTime",
           "Email",
           "FromAddress",
           "Inbound",
+          "InboundName",
           "ToAddress",
           "offset",
           "status"
@@ -4224,6 +4232,9 @@
       },
       "LogEntry": {
         "properties": {
+          "ClientName": {
+            "type": "string"
+          },
           "DateTime": {
             "example": "2025-01-01T12:00:00Z",
             "format": "date-time",
@@ -4243,6 +4254,9 @@
           },
           "Inbound": {
             "example": "inbound-443",
+            "type": "string"
+          },
+          "InboundName": {
             "type": "string"
           },
           "Outbound": {
@@ -7685,7 +7699,7 @@
             "name": "client",
             "in": "query",
             "required": false,
-            "description": "Client email substring.",
+            "description": "Client comment or email substring.",
             "schema": {
               "type": "string"
             }
@@ -7694,7 +7708,7 @@
             "name": "inbound",
             "in": "query",
             "required": false,
-            "description": "Logged inbound tag substring.",
+            "description": "Inbound remark or logged tag substring.",
             "schema": {
               "type": "string"
             }
@@ -7780,10 +7794,12 @@
                     "nextBefore": 0,
                     "rows": [
                       {
+                        "ClientName": "",
                         "DateTime": "2025-01-01T00:00:00Z",
                         "Email": "",
                         "FromAddress": "",
                         "Inbound": "",
+                        "InboundName": "",
                         "ToAddress": "",
                         "offset": 0,
                         "status": ""
@@ -9331,11 +9347,13 @@
                   "success": true,
                   "obj": [
                     {
+                      "ClientName": "",
                       "DateTime": "2025-01-01T12:00:00Z",
                       "Email": "alice@example.com",
                       "Event": 0,
                       "FromAddress": "192.0.2.10:54321",
                       "Inbound": "inbound-443",
+                      "InboundName": "",
                       "Outbound": "direct",
                       "ToAddress": "example.com:443"
                     }
@@ -13534,11 +13552,13 @@
                   "obj": {
                     "accessLogs": [
                       {
+                        "ClientName": "",
                         "DateTime": "2025-01-01T12:00:00Z",
                         "Email": "alice@example.com",
                         "Event": 0,
                         "FromAddress": "192.0.2.10:54321",
                         "Inbound": "inbound-443",
+                        "InboundName": "",
                         "Outbound": "direct",
                         "ToAddress": "example.com:443"
                       }

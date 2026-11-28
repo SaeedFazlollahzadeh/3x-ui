@@ -219,7 +219,11 @@ export default function ClientUsageHistoryModal({
             dataIndex: 'DateTime',
             render: (at: string) => new Date(at).toLocaleString(),
           },
-          { title: t('pages.clients.activityInbound'), dataIndex: 'Inbound' },
+          {
+            title: t('pages.clients.activityInbound'),
+            dataIndex: 'Inbound',
+            render: (tag: string, row) => row.InboundName || tag || '—',
+          },
           { title: t('pages.clients.activityDestination'), dataIndex: 'ToAddress' },
         ]}
       />

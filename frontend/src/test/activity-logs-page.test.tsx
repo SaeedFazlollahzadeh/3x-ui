@@ -23,8 +23,10 @@ describe('activity log pages', () => {
 
     renderWithProviders(<AccessLogsPage />);
     await screen.findByText('No matching logs.');
-    fireEvent.change(screen.getByLabelText('Client email'), { target: { value: 'alice' } });
-    fireEvent.change(screen.getByLabelText('Inbound tag'), { target: { value: 'inbound-443' } });
+    fireEvent.change(screen.getByLabelText('Client name or email'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText('Inbound name or tag'), {
+      target: { value: 'inbound-443' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
     await waitFor(() =>
       expect(get).toHaveBeenCalledWith(

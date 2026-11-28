@@ -495,14 +495,14 @@ export const sections: readonly Section[] = [
             name: 'client',
             in: 'query',
             type: 'string',
-            desc: 'Client email substring.',
+            desc: 'Client comment or email substring.',
             optional: true,
           },
           {
             name: 'inbound',
             in: 'query',
             type: 'string',
-            desc: 'Logged inbound tag substring.',
+            desc: 'Inbound remark or logged tag substring.',
             optional: true,
           },
           {

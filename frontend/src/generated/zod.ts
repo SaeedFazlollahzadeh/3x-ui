@@ -16,10 +16,12 @@ export const ProtocolSchema = z.string();
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
 export const AccessLogEntrySchema = z.object({
+  ClientName: z.string(),
   DateTime: z.string(),
   Email: z.string(),
   FromAddress: z.string(),
   Inbound: z.string(),
+  InboundName: z.string(),
   ToAddress: z.string(),
   offset: z.number().int(),
   status: z.string(),
@@ -1010,11 +1012,13 @@ export const InboundTrafficSummarySchema = z.object({
 export type InboundTrafficSummary = z.infer<typeof InboundTrafficSummarySchema>;
 
 export const LogEntrySchema = z.object({
+  ClientName: z.string().optional(),
   DateTime: z.string(),
   Email: z.string(),
   Event: z.number().int(),
   FromAddress: z.string(),
   Inbound: z.string(),
+  InboundName: z.string().optional(),
   Outbound: z.string(),
   ToAddress: z.string(),
 });

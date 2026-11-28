@@ -2,6 +2,9 @@
 export const SCHEMAS: Record<string, unknown> = {
   "AccessLogEntry": {
     "properties": {
+      "ClientName": {
+        "type": "string"
+      },
       "DateTime": {
         "format": "date-time",
         "type": "string"
@@ -13,6 +16,9 @@ export const SCHEMAS: Record<string, unknown> = {
         "type": "string"
       },
       "Inbound": {
+        "type": "string"
+      },
+      "InboundName": {
         "type": "string"
       },
       "ToAddress": {
@@ -27,10 +33,12 @@ export const SCHEMAS: Record<string, unknown> = {
       }
     },
     "required": [
+      "ClientName",
       "DateTime",
       "Email",
       "FromAddress",
       "Inbound",
+      "InboundName",
       "ToAddress",
       "offset",
       "status"
@@ -4198,6 +4206,9 @@ export const SCHEMAS: Record<string, unknown> = {
   },
   "LogEntry": {
     "properties": {
+      "ClientName": {
+        "type": "string"
+      },
       "DateTime": {
         "example": "2025-01-01T12:00:00Z",
         "format": "date-time",
@@ -4217,6 +4228,9 @@ export const SCHEMAS: Record<string, unknown> = {
       },
       "Inbound": {
         "example": "inbound-443",
+        "type": "string"
+      },
+      "InboundName": {
         "type": "string"
       },
       "Outbound": {

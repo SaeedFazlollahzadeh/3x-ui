@@ -6,10 +6,12 @@ export type ProcessState = string;
 export type Protocol = string;
 
 export interface AccessLogEntry {
+  ClientName: string;
   DateTime: string;
   Email: string;
   FromAddress: string;
   Inbound: string;
+  InboundName: string;
   ToAddress: string;
   offset: number;
   status: string;
@@ -954,11 +956,13 @@ export interface InboundTrafficSummary {
 }
 
 export interface LogEntry {
+  ClientName?: string;
   DateTime: string;
   Email: string;
   Event: number;
   FromAddress: string;
   Inbound: string;
+  InboundName?: string;
   Outbound: string;
   ToAddress: string;
 }

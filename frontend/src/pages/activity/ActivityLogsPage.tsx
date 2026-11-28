@@ -112,14 +112,19 @@ function ActivityLogsPage({ kind }: { kind: 'access' | 'subscription' }) {
                 onFinish={applyFilters}
                 className="activity-log-filters"
               >
-                <Form.Item name="client" label={t('pages.activityLogs.client')}>
+                <Form.Item
+                  name="client"
+                  label={t(
+                    isAccess ? 'pages.activityLogs.clientNameFilter' : 'pages.activityLogs.client',
+                  )}
+                >
                   <Input allowClear maxLength={256} />
                 </Form.Item>
                 <Form.Item
                   name="inbound"
                   label={t(
                     isAccess
-                      ? 'pages.activityLogs.inboundTag'
+                      ? 'pages.activityLogs.inboundNameFilter'
                       : 'pages.activityLogs.inboundMembership',
                   )}
                 >
@@ -208,11 +213,15 @@ function ActivityLogsPage({ kind }: { kind: 'access' | 'subscription' }) {
                       render: formatDate,
                       width: 190,
                     },
-                    { title: t('pages.activityLogs.client'), dataIndex: 'Email', render: text },
+                    {
+                      title: t('pages.activityLogs.clientName'),
+                      dataIndex: 'Email',
+                      render: (email: string, row) => text(row.ClientName || email),
+                    },
                     {
                       title: t('pages.clients.activityInbound'),
                       dataIndex: 'Inbound',
-                      render: text,
+                      render: (tag: string, row) => text(row.InboundName || tag),
                     },
                     {
                       title: t('pages.activityLogs.sourceAddress'),
