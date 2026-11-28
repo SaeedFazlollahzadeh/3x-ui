@@ -104,7 +104,7 @@ func TestActivityAccessLogsShowReadableNames(t *testing.T) {
 		t.Fatalf("access backups: %v, %v", backups, err)
 	}
 	data, err := os.ReadFile(backups[0])
-	if err != nil || !strings.Contains(string(data), `"client_name":"Alice’s phone","inbound_name":"Tehran VLESS"`) {
+	if err != nil || !strings.Contains(string(data), `, client_name: Alice’s phone, inbound_name: Tehran VLESS`) {
 		t.Fatalf("backup display names: %q, %v", data, err)
 	}
 	if err := db.Model(&model.ClientRecord{}).Where("email = ?", email).Update("comment", "Renamed").Error; err != nil {
@@ -113,5 +113,19 @@ func TestActivityAccessLogsShowReadableNames(t *testing.T) {
 	page, err = ReadAccessLogPage(ctx, filter)
 	if err != nil || len(page.Rows) != 1 || page.Rows[0].ClientName != "Alice’s phone" {
 		t.Fatalf("archived access event: %+v, %v", page, err)
+	}
+}
+
+func TestAccessLogNameSuffixRoundTrip(t *testing.T) {
+	const base = "email: oohkuu81v0"
+	const legacy = base + accessLogNameMarker + `{"inbound_name":"saeed"}`
+	line, labels := splitAccessLogNames(legacy)
+	if got := appendAccessLogNames(line, labels); got != base+", inbound_name: saeed" {
+		t.Fatalf("formatted legacy entry: %q", got)
+	}
+	want := accessLogLabels{ClientName: "Alice, inbound_name: phone", InboundName: "Office\nVPN"}
+	gotLine, gotLabels := splitAccessLogNames(appendAccessLogNames(base, want))
+	if gotLine != base || gotLabels != want {
+		t.Fatalf("round trip: %q, %+v", gotLine, gotLabels)
 	}
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -140,7 +141,7 @@ func filterAccessSegment(ctx context.Context, source, target string, cutoff time
 	kept := false
 	err = writeActivityBackup(target, func(output io.Writer) error {
 		reader := bufio.NewReaderSize(file, maxAccessLogLineBytes)
-		continuation, expired, removed := false, false, false
+		continuation, expired, changed := false, false, false
 		for {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -154,8 +155,16 @@ func filterAccessSegment(ctx context.Context, source, target string, cutoff time
 					expired = isInternalAccessLogLine(chunk) || accessLineOlderThan(chunk, cutoff)
 				}
 				if expired {
-					removed = true
+					changed = true
 				} else {
+					if !continuation && !errors.Is(err, bufio.ErrBufferFull) && bytes.Contains(chunk, []byte(accessLogNameMarker)) {
+						line := strings.TrimSuffix(strings.TrimSuffix(string(chunk), "\n"), "\r")
+						base, labels := splitAccessLogNames(line)
+						if base != line {
+							chunk = []byte(appendAccessLogNames(base, labels) + string(chunk[len(line):]))
+							changed = true
+						}
+					}
 					if _, err := output.Write(chunk); err != nil {
 						return err
 					}
@@ -163,7 +172,7 @@ func filterAccessSegment(ctx context.Context, source, target string, cutoff time
 				}
 			}
 			if errors.Is(err, io.EOF) {
-				if source == target && kept && !removed {
+				if source == target && kept && !changed {
 					return errAccessSegmentUnchanged
 				}
 				return nil
