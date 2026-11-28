@@ -264,6 +264,9 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.index = controller.NewIndexController(g)
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, engine)
+	s.api.SetActivityBackupFunc(func(ctx context.Context) (string, error) {
+		return job.RunActivityLogBackup(ctx, &s.tgbotService, s.settingService, true)
+	})
 
 	// Initialize WebSocket hub
 	s.wsHub = websocket.NewHub()
@@ -377,9 +380,11 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	// check client ips from log file every day
 	_, _ = s.cron.AddJob("@daily", job.NewClearLogsJob())
 	_, _ = s.cron.AddJob(cadenceXrayLogPrune, job.NewPruneXrayLogsJob())
-	maintainActivityLogs := func() { job.RunActivityLogMaintenance(s.ctx) }
-	_, _ = s.cron.AddFunc("@hourly", maintainActivityLogs)
-	common.GoRecover("activity-log-maintenance", maintainActivityLogs)
+	_, _ = s.cron.AddFunc("0 0 0 * * *", func() {
+		if _, err := job.RunActivityLogBackup(s.ctx, &s.tgbotService, s.settingService, false); err != nil {
+			logger.Warning("nightly activity log backup:", err)
+		}
+	})
 	_, _ = s.cron.AddJob("@hourly", job.NewWarpIpJob())
 	_, _ = s.cron.AddJob(cadenceRealityWatch, job.NewRealityWatchJob())
 

@@ -286,6 +286,8 @@ var defaultValueMap = map[string]string{
 	"discordLang":          "en-US",
 	"discordEnabledEvents": "login.attempt,cpu.high",
 
+	"activityLogTelegramBackup":    "false",
+	"activityLogEmailBackup":       "false",
 	"accessLogRetentionDays":       "0",
 	"subscriptionLogRetentionDays": "0",
 	"accessLogBackupDays":          "0",
@@ -684,6 +686,14 @@ func (s *SettingService) GetTgbotRuntime() (string, error) {
 
 func (s *SettingService) SetTgbotRuntime(time string) error {
 	return s.setString("tgRunTime", time)
+}
+
+func (s *SettingService) GetActivityLogTelegramBackup() (bool, error) {
+	return s.getBool("activityLogTelegramBackup")
+}
+
+func (s *SettingService) GetActivityLogEmailBackup() (bool, error) {
+	return s.getBool("activityLogEmailBackup")
 }
 
 func (s *SettingService) GetTgBotBackup() (bool, error) {

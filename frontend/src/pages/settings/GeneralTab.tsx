@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Input, InputNumber, Select, Switch, Tabs } from 'antd';
+import { Button, Input, InputNumber, Select, Switch, Tabs } from 'antd';
 import {
   ApartmentOutlined,
   BellOutlined,
@@ -35,6 +35,16 @@ interface GeneralTabProps {
 export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProps) {
   const { t } = useTranslation();
   const { isMobile } = useMediaQuery();
+
+  const [generatingBackup, setGeneratingBackup] = useState(false);
+  const generateBackup = async () => {
+    setGeneratingBackup(true);
+    try {
+      await HttpUtil.post('/panel/api/setting/activityBackup', undefined, { timeout: 180_000 });
+    } finally {
+      setGeneratingBackup(false);
+    }
+  };
 
   const [lang, setLang] = useState<string>(() => LanguageManager.getLanguage());
   const [inboundOptions, setInboundOptions] = useState<{ label: string; value: string }[]>([]);
@@ -424,6 +434,20 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
           ),
           children: (
             <>
+              {(['activityLogTelegramBackup', 'activityLogEmailBackup'] as const).map((key) => (
+                <SettingListItem
+                  key={key}
+                  paddings="small"
+                  title={t(`pages.settings.${key}`)}
+                  description={t(`pages.settings.${key}Help`)}
+                >
+                  <Switch
+                    aria-label={t(`pages.settings.${key}`)}
+                    checked={allSetting[key]}
+                    onChange={(value) => updateSetting({ [key]: value })}
+                  />
+                </SettingListItem>
+              ))}
               {(
                 [
                   ['accessLogRetentionDays', 'activityLogRetentionHelp'],
@@ -449,6 +473,15 @@ export default function GeneralTab({ allSetting, updateSetting }: GeneralTabProp
                   />
                 </SettingListItem>
               ))}
+              <SettingListItem
+                paddings="small"
+                title={t('pages.settings.activityLogManualBackup')}
+                description={t('pages.settings.activityLogManualBackupHelp')}
+              >
+                <Button loading={generatingBackup} onClick={generateBackup}>
+                  {t('pages.settings.activityLogGenerateNow')}
+                </Button>
+              </SettingListItem>
             </>
           ),
         },

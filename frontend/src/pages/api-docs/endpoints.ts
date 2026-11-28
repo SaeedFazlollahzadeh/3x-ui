@@ -2516,11 +2516,17 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/setting/activityBackup',
+        summary:
+          'Generate a separate test log backup using saved settings and send it through the enabled delivery channels.',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/setting/testSmtp',
         summary:
           'Test SMTP connection with stage-by-stage reporting (connect, auth, send). Returns structured result with stage and message.',
         response:
-          '{\n  "success": true,\n  "stage": "send",\n  "msg": "Test email sent successfully"\n}',
+          '{\n  "success": true,\n  "stage": "send",\n  "msg": "smtpTestSuccess",\n  "obj": { "success": true, "stage": "send", "message": "smtpTestSuccess" }\n}',
       },
       {
         method: 'POST',

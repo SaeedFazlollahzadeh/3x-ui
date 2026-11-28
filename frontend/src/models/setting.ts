@@ -25,6 +25,8 @@ export class AllSetting {
   panelOutbound = '';
   networkTrafficMode: NetworkTrafficMode = 'legacy';
   networkTrafficInterface = '';
+  activityLogTelegramBackup = false;
+  activityLogEmailBackup = false;
   accessLogRetentionDays = 0;
   subscriptionLogRetentionDays = 0;
   accessLogBackupDays = 0;

@@ -38,6 +38,8 @@ export type AccessLogPage = z.infer<typeof AccessLogPageSchema>;
 export const AllSettingSchema = z.object({
   accessLogBackupDays: z.number().int().min(0).max(36500),
   accessLogRetentionDays: z.number().int().min(0).max(36500),
+  activityLogEmailBackup: z.boolean(),
+  activityLogTelegramBackup: z.boolean(),
   datepicker: z.string(),
   discordAdminIds: z.string(),
   discordBotBackup: z.boolean(),
@@ -246,6 +248,8 @@ export type AllSetting = z.infer<typeof AllSettingSchema>;
 export const AllSettingViewSchema = z.object({
   accessLogBackupDays: z.number().int().min(0).max(36500),
   accessLogRetentionDays: z.number().int().min(0).max(36500),
+  activityLogEmailBackup: z.boolean(),
+  activityLogTelegramBackup: z.boolean(),
   datepicker: z.string(),
   discordAdminIds: z.string(),
   discordBotBackup: z.boolean(),

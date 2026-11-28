@@ -10,7 +10,7 @@ trap 'chmod -R u+w "$stage"; rm -rf -- "$stage"' EXIT
 go mod download github.com/xtls/xray-core
 module_dir="$(go list -m -f '{{.Dir}}' github.com/xtls/xray-core)"
 cp -R "$module_dir" "$stage/core"
-chmod u+w "$stage/core/app/dispatcher" "$stage/core/app/dispatcher/default.go"
+chmod u+w "$stage/core/app/dispatcher" "$stage/core/app/dispatcher/default.go" "$stage/core/app/log/log.go"
 go run ./tools/xray-limit-patch "$stage/core"
 cp go.mod "$stage/xray.mod"
 cp go.sum "$stage/xray.sum"

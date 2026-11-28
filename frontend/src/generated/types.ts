@@ -26,6 +26,8 @@ export interface AccessLogPage {
 export interface AllSetting {
   accessLogBackupDays: number;
   accessLogRetentionDays: number;
+  activityLogEmailBackup: boolean;
+  activityLogTelegramBackup: boolean;
   datepicker: string;
   discordAdminIds: string;
   discordBotBackup: boolean;
@@ -233,6 +235,8 @@ export interface AllSetting {
 export interface AllSettingView {
   accessLogBackupDays: number;
   accessLogRetentionDays: number;
+  activityLogEmailBackup: boolean;
+  activityLogTelegramBackup: boolean;
   datepicker: string;
   discordAdminIds: string;
   discordBotBackup: boolean;

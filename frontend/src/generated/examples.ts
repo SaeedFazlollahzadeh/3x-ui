@@ -31,6 +31,8 @@ export const EXAMPLES: Record<string, unknown> = {
   "AllSetting": {
     "accessLogBackupDays": 0,
     "accessLogRetentionDays": 0,
+    "activityLogEmailBackup": false,
+    "activityLogTelegramBackup": false,
     "datepicker": "",
     "discordAdminIds": "",
     "discordBotBackup": false,
@@ -237,6 +239,8 @@ export const EXAMPLES: Record<string, unknown> = {
   "AllSettingView": {
     "accessLogBackupDays": 0,
     "accessLogRetentionDays": 0,
+    "activityLogEmailBackup": false,
+    "activityLogTelegramBackup": false,
     "datepicker": "",
     "discordAdminIds": "",
     "discordBotBackup": false,

@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
@@ -27,7 +26,7 @@ var (
 	subscriptionBackupName    = regexp.MustCompile(`^subscription-login-logs_[0-9]{4}(?:_[0-9]{2}){5}\.jsonl$`)
 )
 
-// MaintainActivityLogs refreshes backups before deleting expired live entries.
+// MaintainActivityLogs removes expired live entries.
 // The two log types are independent, so an error in one does not block the other.
 func MaintainActivityLogs(ctx context.Context, now time.Time) error {
 	if !activityLogMaintenanceMu.TryLock() {
@@ -44,19 +43,9 @@ func MaintainActivityLogs(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	accessBackup, err := settings.getInt("accessLogBackupDays")
-	if err != nil {
-		return err
-	}
-	subBackup, err := settings.getInt("subscriptionLogBackupDays")
-	if err != nil {
-		return err
-	}
-
-	dir := config.GetActivityBackupFolder()
 	now = now.UTC()
-	accessErr := maintainAccessLogs(ctx, now, dir, accessRetention, accessBackup)
-	subErr := maintainSubscriptionLogs(ctx, now, dir, subRetention, subBackup)
+	accessErr := maintainAccessLogs(ctx, now, "", accessRetention, 0)
+	subErr := maintainSubscriptionLogs(ctx, now, "", subRetention, 0)
 	return errors.Join(accessErr, subErr)
 }
 
@@ -162,7 +151,7 @@ func filterAccessSegment(ctx context.Context, source, target string, cutoff time
 			}
 			if len(chunk) > 0 {
 				if !continuation {
-					expired = accessLineOlderThan(chunk, cutoff)
+					expired = isInternalAccessLogLine(chunk) || accessLineOlderThan(chunk, cutoff)
 				}
 				if expired {
 					removed = true

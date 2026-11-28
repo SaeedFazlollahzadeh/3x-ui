@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -67,12 +68,13 @@ func splitAccessLogNames(line string) (string, accessLogLabels) {
 	return line, accessLogLabels{}
 }
 
+func isInternalAccessLogLine(line []byte) bool {
+	return bytes.Contains(line, []byte("[api -> api]"))
+}
+
 // annotateAccessLog snapshots display names on completed log lines so archived
 // events remain readable after a client or inbound is renamed or deleted.
 func annotateAccessLog(ctx context.Context, path string, names accessLogNames) error {
-	if len(names.clients) == 0 && len(names.inbounds) == 0 {
-		return nil
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -80,7 +82,7 @@ func annotateAccessLog(ctx context.Context, path string, names accessLogNames) e
 	defer file.Close()
 	return writeActivityBackup(path, func(output io.Writer) error {
 		reader := bufio.NewReaderSize(file, maxAccessLogLineBytes)
-		continuation := false
+		continuation, internal := false, false
 		for {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -89,7 +91,10 @@ func annotateAccessLog(ctx context.Context, path string, names accessLogNames) e
 			if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 				return err
 			}
-			if !continuation && err == nil {
+			if !continuation {
+				internal = isInternalAccessLogLine(chunk)
+			}
+			if !internal && !continuation && err == nil {
 				line := strings.TrimSuffix(strings.TrimSuffix(string(chunk), "\n"), "\r")
 				labels := names.labels(parseAccessLogFields(line), accessLogLabels{})
 				if labels != (accessLogLabels{}) {
@@ -101,8 +106,10 @@ func annotateAccessLog(ctx context.Context, path string, names accessLogNames) e
 					chunk = []byte(line + accessLogNameMarker + string(data) + ending)
 				}
 			}
-			if _, err := output.Write(chunk); err != nil {
-				return err
+			if !internal {
+				if _, err := output.Write(chunk); err != nil {
+					return err
+				}
 			}
 			if errors.Is(err, io.EOF) {
 				return nil

@@ -106,6 +106,12 @@
             "minimum": 0,
             "type": "integer"
           },
+          "activityLogEmailBackup": {
+            "type": "boolean"
+          },
+          "activityLogTelegramBackup": {
+            "type": "boolean"
+          },
           "datepicker": {
             "type": "string"
           },
@@ -776,6 +782,8 @@
         "required": [
           "accessLogBackupDays",
           "accessLogRetentionDays",
+          "activityLogEmailBackup",
+          "activityLogTelegramBackup",
           "datepicker",
           "discordAdminIds",
           "discordBotBackup",
@@ -992,6 +1000,12 @@
             "maximum": 36500,
             "minimum": 0,
             "type": "integer"
+          },
+          "activityLogEmailBackup": {
+            "type": "boolean"
+          },
+          "activityLogTelegramBackup": {
+            "type": "boolean"
           },
           "datepicker": {
             "type": "string"
@@ -1693,6 +1707,8 @@
         "required": [
           "accessLogBackupDays",
           "accessLogRetentionDays",
+          "activityLogEmailBackup",
+          "activityLogTelegramBackup",
           "datepicker",
           "discordAdminIds",
           "discordBotBackup",
@@ -16558,6 +16574,36 @@
         }
       }
     },
+    "/panel/api/setting/activityBackup": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Generate a separate test log backup using saved settings and send it through the enabled delivery channels.",
+        "operationId": "post_panel_api_setting_activityBackup",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "obj": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panel/api/setting/testSmtp": {
       "post": {
         "tags": [
@@ -16585,7 +16631,12 @@
                 "example": {
                   "success": true,
                   "stage": "send",
-                  "msg": "Test email sent successfully"
+                  "msg": "smtpTestSuccess",
+                  "obj": {
+                    "success": true,
+                    "stage": "send",
+                    "message": "smtpTestSuccess"
+                  }
                 }
               }
             }

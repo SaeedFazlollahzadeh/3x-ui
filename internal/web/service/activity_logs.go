@@ -132,7 +132,7 @@ func ReadAccessLogPage(ctx context.Context, filter ActivityLogFilter) (AccessLog
 	client, inbound, search := strings.ToLower(filter.Client), strings.ToLower(filter.Inbound), strings.ToLower(filter.Search)
 	err = scanAccessLogs(ctx, path, filter.Before, func(line string, offset int64) {
 		line, recorded := splitAccessLogNames(line)
-		if strings.Contains(line, "api -> api") {
+		if isInternalAccessLogLine([]byte(line)) {
 			return
 		}
 		fields := strings.Fields(line)

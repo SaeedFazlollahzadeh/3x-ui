@@ -33,6 +33,8 @@ export const AllSettingFieldsSchema = z
     realityScanCandidates: z.string().optional(),
     ipLimitAllowlist: z.string().optional(),
     panelOutbound: z.string().optional(),
+    activityLogTelegramBackup: z.boolean().optional(),
+    activityLogEmailBackup: z.boolean().optional(),
     accessLogRetentionDays: z.number().int().min(0).max(36500).optional(),
     subscriptionLogRetentionDays: z.number().int().min(0).max(36500).optional(),
     accessLogBackupDays: z.number().int().min(0).max(36500).optional(),

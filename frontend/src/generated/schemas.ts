@@ -80,6 +80,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "minimum": 0,
         "type": "integer"
       },
+      "activityLogEmailBackup": {
+        "type": "boolean"
+      },
+      "activityLogTelegramBackup": {
+        "type": "boolean"
+      },
       "datepicker": {
         "type": "string"
       },
@@ -750,6 +756,8 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "accessLogBackupDays",
       "accessLogRetentionDays",
+      "activityLogEmailBackup",
+      "activityLogTelegramBackup",
       "datepicker",
       "discordAdminIds",
       "discordBotBackup",
@@ -966,6 +974,12 @@ export const SCHEMAS: Record<string, unknown> = {
         "maximum": 36500,
         "minimum": 0,
         "type": "integer"
+      },
+      "activityLogEmailBackup": {
+        "type": "boolean"
+      },
+      "activityLogTelegramBackup": {
+        "type": "boolean"
       },
       "datepicker": {
         "type": "string"
@@ -1667,6 +1681,8 @@ export const SCHEMAS: Record<string, unknown> = {
     "required": [
       "accessLogBackupDays",
       "accessLogRetentionDays",
+      "activityLogEmailBackup",
+      "activityLogTelegramBackup",
       "datepicker",
       "discordAdminIds",
       "discordBotBackup",

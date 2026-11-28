@@ -29,6 +29,9 @@ type PanelRestart struct {
 }
 
 type AllSetting struct {
+	ActivityLogTelegramBackup bool `json:"activityLogTelegramBackup" form:"activityLogTelegramBackup"`
+	ActivityLogEmailBackup    bool `json:"activityLogEmailBackup" form:"activityLogEmailBackup"`
+
 	AccessLogRetentionDays       int `json:"accessLogRetentionDays" form:"accessLogRetentionDays" validate:"min=0,max=36500"`
 	SubscriptionLogRetentionDays int `json:"subscriptionLogRetentionDays" form:"subscriptionLogRetentionDays" validate:"min=0,max=36500"`
 	AccessLogBackupDays          int `json:"accessLogBackupDays" form:"accessLogBackupDays" validate:"min=0,max=36500"`

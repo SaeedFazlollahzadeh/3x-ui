@@ -1599,7 +1599,7 @@ func (s *ServerService) readXrayLogs(
 		line = strings.TrimSpace(line)
 		line, recorded := splitAccessLogNames(line)
 
-		if line == "" || strings.Contains(line, "api -> api") {
+		if line == "" || isInternalAccessLogLine([]byte(line)) {
 			// skipping empty lines and api calls
 			return
 		}

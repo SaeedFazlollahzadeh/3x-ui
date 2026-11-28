@@ -132,14 +132,22 @@ func (t *Tgbot) dropNoticeFor(chatID int64, msgID int) {
 // sendBackupFile uploads a file with its summary as caption. It has no hide button:
 // that button deletes the message, and this may be the admin's only copy.
 func (t *Tgbot) sendBackupFile(chatID int64, data []byte, name, caption string) bool {
-	if liveBot() == nil || data == nil {
+	if data == nil {
 		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	return t.sendBackupDocument(context.Background(), chatID, tu.FileFromBytes(data, name), caption)
+}
+
+func (t *Tgbot) sendBackupDocument(ctx context.Context, chatID int64, document telego.InputFile, caption string) bool {
+	bot := liveBot()
+	if bot == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	_, err := liveBot().SendDocument(ctx, &telego.SendDocumentParams{
+	_, err := bot.SendDocument(ctx, &telego.SendDocumentParams{
 		ChatID: tu.ID(chatID), MessageThreadID: adminTopic(chatID),
-		Document:  tu.FileFromBytes(data, name),
+		Document:  document,
 		Caption:   caption,
 		ParseMode: "HTML",
 	})

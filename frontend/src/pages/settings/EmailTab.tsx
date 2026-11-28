@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Input, InputNumber, Select, Space, Switch, Tabs } from 'antd';
+import { Alert, Button, Input, InputNumber, Select, Space, Switch, Tabs, Typography } from 'antd';
 import { MailOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
 import { HttpUtil } from '@/utils';
 import { onNumber } from '@/utils/onNumber';
@@ -38,8 +38,16 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
     setTestLoading(true);
     setTestResult(null);
     try {
-      const res = (await HttpUtil.post('/panel/api/setting/testSmtp')) as SmtpTestResult;
-      setTestResult(res);
+      const res = await HttpUtil.post<{ stage: string; message: string }>(
+        '/panel/api/setting/testSmtp',
+        undefined,
+        { silent: true },
+      );
+      setTestResult({
+        success: res.success,
+        stage: res.obj?.stage,
+        msg: res.obj?.message || res.msg,
+      });
     } catch (e: unknown) {
       setTestResult({
         success: false,
@@ -186,6 +194,9 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
               </SettingListItem>
 
               <Space orientation="vertical" size={8} style={{ width: '100%', marginTop: 16 }}>
+                <Typography.Text type="secondary">
+                  {t('pages.settings.smtpTestSavedSettings')}
+                </Typography.Text>
                 <Button
                   type="primary"
                   icon={<SendOutlined aria-hidden />}
@@ -202,8 +213,12 @@ export default function EmailTab({ allSetting, updateSetting }: EmailTabProps) {
                         t('pages.settings.' + testResult.msg)
                       ) : (
                         <span>
-                          <b>{stageLabel[testResult.stage || ''] || testResult.stage}:</b>{' '}
-                          {t('pages.settings.' + testResult.msg)}
+                          {testResult.stage && (
+                            <>
+                              <b>{stageLabel[testResult.stage] || testResult.stage}:</b>{' '}
+                            </>
+                          )}
+                          {t('pages.settings.' + testResult.msg, { defaultValue: testResult.msg })}
                         </span>
                       )
                     }

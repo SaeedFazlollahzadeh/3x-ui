@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AllSetting } from '@/models/setting';
 import GeneralTab from '@/pages/settings/GeneralTab';
+import { HttpUtil } from '@/utils';
 import { renderWithProviders } from './test-utils';
 
 // Mounting fetches inbound options with no visible change; settle it inside act().
@@ -49,5 +50,31 @@ describe('GeneralTab', () => {
     });
     expect(updateSetting).toHaveBeenCalledWith({ accessLogRetentionDays: 7 });
     expect(updateSetting).toHaveBeenCalledWith({ subscriptionLogBackupDays: 30 });
+  });
+  it('enables Telegram and email nightly backup delivery independently', async () => {
+    const updateSetting = vi.fn();
+    await renderGeneralTab(updateSetting);
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity logs' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Send nightly log backups by Telegram' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Send nightly log backups by email' }));
+    expect(updateSetting.mock.calls).toEqual([
+      [{ activityLogTelegramBackup: true }],
+      [{ activityLogEmailBackup: true }],
+    ]);
+  });
+  it('generates a manual backup using the saved settings', async () => {
+    await renderGeneralTab(vi.fn());
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity logs' }));
+    const post = vi.spyOn(HttpUtil, 'post');
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Manual log backup' }));
+      });
+      expect(post).toHaveBeenCalledWith('/panel/api/setting/activityBackup', undefined, {
+        timeout: 180_000,
+      });
+    } finally {
+      post.mockRestore();
+    }
   });
 });

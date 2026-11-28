@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -36,6 +37,10 @@ func NewAPIController(g *gin.RouterGroup, router http.Handler) *APIController {
 	a := &APIController{}
 	a.initRouter(g, router)
 	return a
+}
+
+func (a *APIController) SetActivityBackupFunc(fn func(context.Context) (string, error)) {
+	a.settingController.activityBackup = fn
 }
 
 // requireMCPEnabled hides the MCP endpoint until the operator turns it on: it hands

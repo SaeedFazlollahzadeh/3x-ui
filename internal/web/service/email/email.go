@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net"
 	"net/mail"
@@ -93,6 +94,13 @@ func dialSMTP(addr, host string, timeout time.Duration, implicitTLS bool) (net.C
 
 // Send sends an HTML email to all configured recipients.
 func (s *EmailService) Send(subject, body string) error {
+	return s.sendConfigured(func(w io.Writer, from, fromName string, recipients []string) error {
+		_, err := w.Write(buildMessage(from, fromName, recipients, subject, body))
+		return err
+	})
+}
+
+func (s *EmailService) sendConfigured(write func(io.Writer, string, string, []string) error) error {
 	host, err := s.settingService.GetSmtpHost()
 	if err != nil || host == "" {
 		return fmt.Errorf("smtp host not configured")
@@ -123,35 +131,13 @@ func (s *EmailService) Send(subject, body string) error {
 	}
 
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-	msg := buildMessage(from, fromName, recipients, subject, body)
-
-	// Authenticate only when credentials are set. Go's PlainAuth refuses to run
-	// over the unencrypted "none" transport, so an open relay must use nil auth.
 	var auth smtp.Auth
 	if username != "" && password != "" {
 		auth = smtp.PlainAuth("", username, password, host)
 	}
-
-	// Wrap in a channel with timeout to prevent indefinite blocking
-	type result struct{ err error }
-	ch := make(chan result, 1)
-	go func() {
-		switch encryptionType {
-		case "tls":
-			ch <- result{s.sendWithTLS(addr, auth, from, recipients, msg, host)}
-		case "starttls", "none":
-			ch <- result{s.sendPlain(addr, auth, from, recipients, msg, host)}
-		default:
-			ch <- result{fmt.Errorf("unknown SMTP encryption type: %s", encryptionType)}
-		}
-	}()
-
-	select {
-	case r := <-ch:
-		return r.err
-	case <-time.After(30 * time.Second):
-		return fmt.Errorf("smtp connection timed out after 30s")
-	}
+	return sendSMTP(addr, host, encryptionType, auth, from, recipients, func(w io.Writer) error {
+		return write(w, from, fromName, recipients)
+	})
 }
 
 // TestConnection tests SMTP connection stage by stage and sends a test email.
@@ -206,13 +192,8 @@ func (s *EmailService) TestConnection() SMTPTestResult {
 		return SMTPTestResult{false, "auth", classifySMTPError(err)}
 	}
 
-	// STARTTLS upgrade for non-TLS connections
-	if encryptionType == "starttls" {
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err = client.StartTLS(&tls.Config{ServerName: host}); err != nil {
-				return SMTPTestResult{false, "auth", classifySMTPError(err)}
-			}
-		}
+	if err := upgradeSMTP(client, host, encryptionType); err != nil {
+		return SMTPTestResult{false, "auth", classifySMTPError(err)}
 	}
 
 	if username != "" && password != "" {
@@ -252,94 +233,68 @@ func (s *EmailService) TestConnection() SMTPTestResult {
 	return SMTPTestResult{true, "send", "smtpTestSuccess"}
 }
 
-func (s *EmailService) sendWithTLS(addr string, auth smtp.Auth, from string, to []string, msg []byte, host string) error {
-	conn, err := dialSMTP(addr, host, smtpConnectTimeout, true)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(smtpDeadline))
-
-	client, err := smtp.NewClient(conn, host)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	if err = client.Hello("localhost"); err != nil {
-		return err
-	}
-	if auth != nil {
-		if err = client.Auth(auth); err != nil {
-			return err
+func upgradeSMTP(client *smtp.Client, host, encryption string) error {
+	switch encryption {
+	case "none", "tls":
+		return nil
+	case "starttls":
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			return errors.New("SMTP server does not offer STARTTLS")
 		}
+		return client.StartTLS(&tls.Config{ServerName: host})
+	default:
+		return fmt.Errorf("unknown SMTP encryption type: %s", encryption)
 	}
-	if err = client.Mail(from); err != nil {
-		return err
-	}
-	for _, r := range to {
-		if err = client.Rcpt(r); err != nil {
-			return err
-		}
-	}
-	w, err := client.Data()
-	if err != nil {
-		return err
-	}
-	if _, err = w.Write(msg); err != nil {
-		return err
-	}
-	return w.Close()
 }
 
-// sendPlain delivers over a plain TCP connection, opportunistically upgrading
-// via STARTTLS when the server advertises it (the behavior net/smtp.SendMail
-// gives the "starttls" and "none" transports). Unlike SendMail it dials with a
-// timeout and arms a connection deadline, so a server that never speaks or
-// stalls mid-protocol cannot block the sender goroutine past smtpDeadline.
 func (s *EmailService) sendPlain(addr string, auth smtp.Auth, from string, to []string, msg []byte, host string) error {
-	conn, err := dialSMTP(addr, host, smtpConnectTimeout, false)
+	return sendSMTP(addr, host, "none", auth, from, to, func(w io.Writer) error {
+		_, err := w.Write(msg)
+		return err
+	})
+}
+
+func sendSMTP(addr, host, encryption string, auth smtp.Auth, from string, to []string, write func(io.Writer) error) error {
+	deadline := time.Now().Add(smtpDeadline)
+	conn, err := dialSMTP(addr, host, min(smtpDeadline, smtpConnectTimeout), encryption == "tls")
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(smtpDeadline))
+	_ = conn.SetDeadline(deadline)
 
 	client, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-
-	if err = client.Hello("localhost"); err != nil {
+	if err := client.Hello("localhost"); err != nil {
 		return err
 	}
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err = client.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			return err
-		}
+	if err := upgradeSMTP(client, host, encryption); err != nil {
+		return err
 	}
 	if auth != nil {
-		if err = client.Auth(auth); err != nil {
+		if err := client.Auth(auth); err != nil {
 			return err
 		}
 	}
-	if err = client.Mail(from); err != nil {
+	if err := client.Mail(from); err != nil {
 		return err
 	}
 	for _, r := range to {
-		if err = client.Rcpt(r); err != nil {
+		if err := client.Rcpt(r); err != nil {
 			return err
 		}
 	}
-	w, err := client.Data()
+	writer, err := client.Data()
 	if err != nil {
 		return err
 	}
-	if _, err = w.Write(msg); err != nil {
+	if err := write(writer); err != nil {
 		return err
 	}
-	return w.Close()
+	return writer.Close()
 }
 
 // SendTest sends a test email and returns any error with detail.
@@ -415,7 +370,7 @@ func resolveFrom(from, fromName string) (string, string) {
 	return parsed.Address, fromName
 }
 
-func buildMessage(fromAddr, fromName string, to []string, subject, body string) []byte {
+func buildMessageHeaders(fromAddr, fromName string, to []string, subject string) string {
 	fromAddr = headerSanitizer.Replace(fromAddr)
 	fromName = headerSanitizer.Replace(fromName)
 	from := (&mail.Address{Name: fromName, Address: fromAddr}).String()
@@ -435,8 +390,9 @@ func buildMessage(fromAddr, fromName string, to []string, subject, body string) 
 	fmt.Fprintf(&msg, "Message-ID: %s\r\n", messageID)
 	fmt.Fprintf(&msg, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/html; charset=utf-8\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(body)
-	return []byte(msg.String())
+	return msg.String()
+}
+
+func buildMessage(fromAddr, fromName string, to []string, subject, body string) []byte {
+	return []byte(buildMessageHeaders(fromAddr, fromName, to, subject) + "Content-Type: text/html; charset=utf-8\r\n\r\n" + body)
 }

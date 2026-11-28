@@ -1,4 +1,4 @@
-// xray-limit-patch adds the speed limiter to a writable copy of the pinned core.
+// xray-limit-patch applies the panel patches to a writable copy of the pinned core.
 package main
 
 import (
@@ -26,10 +26,20 @@ func main() {
 	}
 	check(os.WriteFile(path, []byte(strings.ReplaceAll(string(source), anchor, "\tapplyPanelSpeedLimits(ctx, link)\n"+anchor)), 0o644))
 	check(os.WriteFile(filepath.Join(pkg, "panel_speed_limits.go"), []byte(dispatcher), 0o644))
+
+	path = filepath.Join(os.Args[1], "app", "log", "log.go")
+	source, err = os.ReadFile(path)
+	check(err)
+	const accessCase = "\tcase *log.AccessMessage:\n"
+	if strings.Count(string(source), accessCase) != 1 {
+		panic("pinned Xray access logger changed")
+	}
+	const skipAPI = "\t\tif msg.Detour == \"api -> api\" && msg.Email == \"\" {\n\t\t\treturn\n\t\t}\n"
+	check(os.WriteFile(path, []byte(strings.ReplaceAll(string(source), accessCase, accessCase+skipAPI)), 0o644))
 }
 
 func check(err error) {
 	if err != nil {
-		panic(fmt.Errorf("patch Xray speed limiter: %w", err))
+		panic(fmt.Errorf("patch Xray core: %w", err))
 	}
 }

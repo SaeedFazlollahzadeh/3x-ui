@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -51,6 +53,7 @@ type validateRegexForm struct {
 
 // SettingController handles settings and user management operations.
 type SettingController struct {
+	activityBackup  func(context.Context) (string, error)
 	settingService  service.SettingService
 	userService     panel.UserService
 	panelService    panel.PanelService
@@ -82,6 +85,7 @@ func (a *SettingController) initRouter(g *gin.RouterGroup) {
 	g.POST("/apiTokens/delete/:id", a.deleteApiToken)
 	g.POST("/apiTokens/setEnabled/:id", a.setApiTokenEnabled)
 	g.POST("/testSmtp", a.testSmtp)
+	g.POST("/activityBackup", a.generateActivityBackup)
 	g.POST("/testTgBot", a.testTgBot)
 	g.POST("/tgBotCapabilities", a.tgBotCapabilities)
 	g.POST("/testDiscord", a.testDiscord)
@@ -320,6 +324,22 @@ func (a *SettingController) setApiTokenEnabled(c *gin.Context) {
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), a.apiTokenService.SetEnabledExpectedScope(id, form.ExpectedScope, form.Enabled))
 }
 
+func (a *SettingController) generateActivityBackup(c *gin.Context) {
+	if a.activityBackup == nil {
+		jsonMsg(c, "", errors.New("activity backup is unavailable"))
+		return
+	}
+	const backupTimeout = 3 * time.Minute
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(backupTimeout))
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupTimeout)
+	defer cancel()
+	filename, err := a.activityBackup(ctx)
+	if err != nil && filename != "" {
+		err = fmt.Errorf("saved %s: %w", filename, err)
+	}
+	jsonMsg(c, filename, err)
+}
+
 func (a *SettingController) testSmtp(c *gin.Context) {
 	if emailService == nil {
 		jsonMsg(c, I18nWeb(c, "pages.settings.smtpNotInitialized"), errors.New("email service not available"))
@@ -333,6 +353,7 @@ func (a *SettingController) testSmtp(c *gin.Context) {
 			"success": false,
 			"stage":   result.Stage,
 			"msg":     result.Message,
+			"obj":     result,
 		})
 		return
 	}
@@ -341,6 +362,7 @@ func (a *SettingController) testSmtp(c *gin.Context) {
 		"success": true,
 		"stage":   result.Stage,
 		"msg":     result.Message,
+		"obj":     result,
 	})
 }
 
