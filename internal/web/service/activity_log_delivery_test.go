@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 func TestActivityDeliveryArchivePreservesBackupNamesAndContents(t *testing.T) {
@@ -25,7 +27,8 @@ func TestActivityDeliveryArchivePreservesBackupNamesAndContents(t *testing.T) {
 		}
 		files[path] = relative
 	}
-	path, err := buildActivityArchive(context.Background(), root, files)
+	now := time.Date(2026, 11, 28, 0, 0, 0, 0, time.UTC)
+	path, err := buildActivityArchive(context.Background(), root, files, nil, now, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +41,9 @@ func TestActivityDeliveryArchivePreservesBackupNamesAndContents(t *testing.T) {
 		t.Fatalf("archive includes %d files", len(got.File))
 	}
 	for _, entry := range got.File {
+		if !entry.Modified.Equal(now) {
+			t.Fatalf("archive entry %q timestamp = %s, want %s", entry.Name, entry.Modified, now)
+		}
 		reader, err := entry.Open()
 		if err != nil {
 			t.Fatal(err)
@@ -61,6 +67,15 @@ func TestActivityBackupSavesOneArchiveAndFiltersAPITraffic(t *testing.T) {
 
 	nightly, _, err := buildActivityLogBackup(ctx, root, now, 2, 0, false)
 	if err != nil {
+		t.Fatal(err)
+	}
+	older := at + " from 192.0.2.2:123 accepted tcp:older.example:443 [inbound >> direct] email: test"
+	// Add a second live segment after the nightly archive was written.
+	logPath, err := xray.GetAccessLogPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, []byte(older+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manual, name, err := buildActivityLogBackup(ctx, root, now, 2, 0, true)
@@ -89,7 +104,11 @@ func TestActivityBackupSavesOneArchiveAndFiltersAPITraffic(t *testing.T) {
 		}
 		got, err := io.ReadAll(file)
 		_ = file.Close()
-		if err != nil || string(got) != client+"\n" {
+		want := client + "\n"
+		if path == manual {
+			want += older + "\n"
+		}
+		if err != nil || string(got) != want {
 			t.Fatalf("unexpected log in %s: %q (%v)", path, got, err)
 		}
 	}

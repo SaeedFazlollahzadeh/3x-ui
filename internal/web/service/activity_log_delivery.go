@@ -2,7 +2,11 @@ package service
 
 import (
 	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -13,6 +17,11 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 )
+
+type activityAccessSegment struct {
+	Name string
+	Size int64
+}
 
 var nightlyActivityBackupName = regexp.MustCompile(`^activity-logs_[0-9]{4}(?:_[0-9]{2}){5}\.zip$`)
 
@@ -55,6 +64,7 @@ func buildActivityLogBackup(ctx context.Context, root string, now time.Time, acc
 	}
 
 	files := make(map[string]string)
+	var accessPaths []string
 	if accessDays > 0 {
 		if err := maintainAccessLogs(ctx, now.UTC(), stage, 0, accessDays); err != nil {
 			return "", "", err
@@ -63,9 +73,7 @@ func buildActivityLogBackup(ctx context.Context, root string, now time.Time, acc
 		if err != nil {
 			return "", "", err
 		}
-		for _, path := range paths {
-			files[path] = "access-logs/" + filepath.Base(path)
-		}
+		accessPaths = paths
 	}
 	if subscriptionDays > 0 {
 		if err := maintainSubscriptionLogs(ctx, now.UTC(), stage, 0, subscriptionDays); err != nil {
@@ -90,7 +98,7 @@ func buildActivityLogBackup(ctx context.Context, root string, now time.Time, acc
 		name = activityBackupName(prefix, ".zip", now)
 		target = filepath.Join(root, name)
 	}
-	temp, err := buildActivityArchive(ctx, stage, files)
+	temp, err := buildActivityArchive(ctx, stage, files, accessPaths, now, accessDays > 0)
 	if err != nil {
 		return "", "", err
 	}
@@ -143,6 +151,12 @@ func restoreActivityArchive(ctx context.Context, path, stage string, access, sub
 	defer archive.Close()
 	for _, entry := range archive.File {
 		segment, isAccess := strings.CutPrefix(entry.Name, "access-logs/")
+		if access && !isAccess && accessSegmentName.MatchString(entry.Name) {
+			if err := restoreCombinedAccessBackup(ctx, entry, archive.Comment, stage); err != nil {
+				return err
+			}
+			continue
+		}
 		if !(access && isAccess && accessSegmentName.MatchString(segment)) &&
 			!(subscription && subscriptionBackupName.MatchString(entry.Name)) {
 			continue
@@ -182,16 +196,62 @@ func saveActivityBackup(ctx context.Context, target string, reader io.Reader) er
 	})
 }
 
-func buildActivityArchive(ctx context.Context, dir string, files map[string]string) (string, error) {
+// The ZIP comment records the sizes of the merged access segments so the
+// next run can restore them by name and merge with live history without duplicates.
+func restoreCombinedAccessBackup(ctx context.Context, entry *zip.File, comment, stage string) error {
+	var segments []activityAccessSegment
+	index, err := gzip.NewReader(base64.NewDecoder(base64.StdEncoding, strings.NewReader(comment)))
+	if err != nil {
+		return err
+	}
+	defer index.Close()
+	if err := json.NewDecoder(index).Decode(&segments); err != nil {
+		return err
+	}
+	reader, err := entry.Open()
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	for _, segment := range segments {
+		if !accessSegmentName.MatchString(segment.Name) || segment.Size < 0 {
+			return errors.New("invalid access backup segment")
+		}
+		part := &io.LimitedReader{R: reader, N: segment.Size}
+		if err := saveActivityBackup(ctx, filepath.Join(stage, "access-logs", segment.Name), part); err != nil {
+			return err
+		}
+		if part.N != 0 {
+			return io.ErrUnexpectedEOF
+		}
+	}
+	var extra [1]byte
+	if n, err := io.ReadFull(reader, extra[:]); n != 0 || !errors.Is(err, io.EOF) {
+		return errors.Join(errors.New("invalid combined access backup"), err)
+	}
+	return nil
+}
+
+func buildActivityArchive(ctx context.Context, dir string, files map[string]string, accessPaths []string, now time.Time, includeAccess bool) (string, error) {
 	temp, err := os.CreateTemp(dir, ".activity-delivery-*.zip")
 	if err != nil {
 		return "", err
 	}
 	archive := zip.NewWriter(temp)
 	var copyErr error
-	for path, name := range files {
-		if copyErr = addActivityArchiveFile(ctx, archive, path, name); copyErr != nil {
-			break
+	if includeAccess {
+		copyErr = addActivityAccessLog(ctx, archive, accessPaths, now)
+	}
+	if copyErr == nil {
+		for path, name := range files {
+			entry, err := createActivityZIPEntry(archive, name, now)
+			if err == nil {
+				_, err = copyActivityArchiveFile(ctx, entry, path)
+			}
+			if err != nil {
+				copyErr = err
+				break
+			}
 		}
 	}
 	if err := errors.Join(copyErr, archive.Close(), temp.Close()); err != nil {
@@ -201,19 +261,42 @@ func buildActivityArchive(ctx context.Context, dir string, files map[string]stri
 	return temp.Name(), nil
 }
 
-func addActivityArchiveFile(ctx context.Context, archive *zip.Writer, path, name string) error {
-	if err := ctx.Err(); err != nil {
+func addActivityAccessLog(ctx context.Context, archive *zip.Writer, paths []string, now time.Time) error {
+	entry, err := createActivityZIPEntry(archive, activityBackupName("access-logs", ".log", now), now)
+	if err != nil {
 		return err
+	}
+	segments := make([]activityAccessSegment, 0, len(paths))
+	for _, path := range paths {
+		size, err := copyActivityArchiveFile(ctx, entry, path)
+		if err != nil {
+			return err
+		}
+		segments = append(segments, activityAccessSegment{Name: filepath.Base(path), Size: size})
+	}
+	var comment bytes.Buffer
+	encoded := base64.NewEncoder(base64.StdEncoding, &comment)
+	compressed := gzip.NewWriter(encoded)
+	if err := errors.Join(json.NewEncoder(compressed).Encode(segments), compressed.Close(), encoded.Close()); err != nil {
+		return err
+	}
+	return archive.SetComment(comment.String())
+}
+
+func createActivityZIPEntry(archive *zip.Writer, name string, now time.Time) (io.Writer, error) {
+	header := &zip.FileHeader{Name: name, Method: zip.Deflate, Modified: now.UTC()}
+	header.SetMode(0o600)
+	return archive.CreateHeader(header)
+}
+
+func copyActivityArchiveFile(ctx context.Context, entry io.Writer, path string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer file.Close()
-	entry, err := archive.Create(name)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(entry, file)
-	return err
+	return io.Copy(entry, file)
 }
